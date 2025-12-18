@@ -28,7 +28,7 @@ class VideoController extends Controller
     public function upload(Request $request)
     {
         $request->validate([
-            'video' => 'required|mimes:mp4,mov,ogg,qt|max:50000', // 50MB limit for demo
+            'video' => 'required|mimes:mp4,mov,ogg,qt|max:2097152', // 2GB limit
         ]);
 
         if ($request->hasFile('video')) {
