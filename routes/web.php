@@ -16,8 +16,21 @@ Route::get('/', function () {
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::get('/dashboard', [VideoController::class, 'index'])->name('dashboard');
-    Route::post('/upload', [VideoController::class, 'upload'])->name('video.upload');
+    Route::get('/dashboard', [\App\Http\Controllers\CategoryController::class, 'index'])->name('dashboard');
+    
+    // Categorías y Videos
+    Route::get('/categories', [\App\Http\Controllers\CategoryController::class, 'index'])->name('categories.index');
+    Route::get('/categories/{category}', [\App\Http\Controllers\CategoryController::class, 'show'])->name('categories.show');
+    Route::post('/categories/{category}/unlock', [\App\Http\Controllers\CategoryController::class, 'unlock'])->name('categories.unlock');
+
+    // Administración (Solo para usuarios con is_admin = true)
+    Route::middleware([\App\Http\Middleware\AdminMiddleware::class])->group(function () {
+        Route::post('/categories', [\App\Http\Controllers\Admin\AdminCategoryController::class, 'store'])->name('categories.store');
+        Route::patch('/categories/{category}', [\App\Http\Controllers\Admin\AdminCategoryController::class, 'update'])->name('categories.update');
+        Route::delete('/categories/{category}', [\App\Http\Controllers\Admin\AdminCategoryController::class, 'destroy'])->name('categories.destroy');
+        Route::post('/upload', [VideoController::class, 'upload'])->name('video.upload');
+        Route::delete('/videos/{video}', [VideoController::class, 'destroy'])->name('video.destroy');
+    });
 });
 
 Route::middleware('auth')->group(function () {

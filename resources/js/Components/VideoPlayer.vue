@@ -58,10 +58,33 @@ const handleMouseMove = () => {
     }, 3000);
 };
 
+const handleKeyDown = (e: KeyboardEvent) => {
+    if (!videoRef.value) return;
+    
+    // Prevent scrolling when using space
+    if (e.code === 'Space') {
+        e.preventDefault();
+        togglePlay();
+    }
+    
+    if (e.code === 'ArrowRight') {
+        videoRef.value.currentTime += 5;
+    }
+    
+    if (e.code === 'ArrowLeft') {
+        videoRef.value.currentTime -= 5;
+    }
+
+    if (e.code === 'KeyF') {
+        toggleFullscreen();
+    }
+};
+
 onMounted(() => {
     if (videoRef.value) {
         videoRef.value.addEventListener('timeupdate', handleProgress);
         videoRef.value.addEventListener('ended', () => isPlaying.value = false);
+        window.addEventListener('keydown', handleKeyDown);
     }
 });
 
@@ -69,13 +92,14 @@ onUnmounted(() => {
     if (videoRef.value) {
         videoRef.value.removeEventListener('timeupdate', handleProgress);
     }
+    window.removeEventListener('keydown', handleKeyDown);
     clearTimeout(controlsTimeout);
 });
 </script>
 
 <template>
     <div 
-        class="relative group bg-black rounded-xl overflow-hidden shadow-2xl aspect-video border border-white/10"
+        class="relative group bg-black rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] aspect-video border border-white/10"
         @mousemove="handleMouseMove"
         @mouseleave="showControls = false"
     >
@@ -88,57 +112,64 @@ onUnmounted(() => {
 
         <!-- Overlay Controls -->
         <Transition name="fade">
-            <div v-show="showControls || !isPlaying" class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 flex flex-col justify-end p-4 transition-opacity duration-300">
+            <div v-show="showControls || !isPlaying" class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/20 flex flex-col justify-end p-6 transition-opacity duration-300">
                 
-                <!-- Title -->
-                <div v-if="title" class="absolute top-4 left-4 text-white font-medium drop-shadow-md">
-                    {{ title }}
+                <!-- Title & Quality -->
+                <div v-if="title" class="absolute top-6 left-6 flex items-center gap-3">
+                    <span class="text-white font-bold drop-shadow-lg text-lg">{{ title }}</span>
+                    <span class="px-1.5 py-0.5 bg-white/10 backdrop-blur-md rounded text-[10px] font-bold text-white border border-white/20 whitespace-nowrap">4K ULTRA HD</span>
                 </div>
 
                 <!-- Progress Bar -->
                 <div 
-                    class="w-full h-1.5 bg-white/20 rounded-full mb-4 cursor-pointer relative overflow-hidden group/progress"
+                    class="w-full h-1.5 bg-white/10 rounded-full mb-6 cursor-pointer relative group/progress transition-all hover:h-2"
                     @click="seek"
                 >
                     <div 
-                        class="absolute top-0 left-0 h-full bg-blue-500 transition-all"
+                        class="absolute top-0 left-0 h-full bg-gradient-to-r from-pink-500 to-purple-600 rounded-full shadow-[0_0_15px_rgba(236,72,153,0.5)]"
                         :style="{ width: progress + '%' }"
                     ></div>
+                    <!-- Hover seeker -->
+                    <div class="absolute -top-10 left-0 opacity-0 group-hover/progress:opacity-100 transition-opacity bg-white/90 text-black text-[10px] font-bold px-2 py-1 rounded-lg">
+                        Previsualizar
+                    </div>
                 </div>
 
                 <!-- Bottom Controls -->
                 <div class="flex items-center justify-between text-white">
-                    <div class="flex items-center gap-4">
-                        <button @click="togglePlay" class="hover:scale-110 transition-transform">
-                            <Play v-if="!isPlaying" class="w-6 h-6 fill-current" />
-                            <Pause v-else class="w-6 h-6 fill-current" />
+                    <div class="flex items-center gap-6">
+                        <button @click="togglePlay" class="hover:scale-125 transition-transform active:scale-95 text-pink-500">
+                            <Play v-if="!isPlaying" class="w-8 h-8 fill-current" />
+                            <Pause v-else class="w-8 h-8 fill-current" />
                         </button>
                         
-                        <div class="flex items-center gap-2 group/volume">
-                             <button @click="toggleMute">
-                                <VolumeX v-if="isMuted || volume === 0" class="w-5 h-5" />
-                                <Volume2 v-else class="w-5 h-5" />
+                        <div class="flex items-center gap-3 group/volume">
+                             <button @click="toggleMute" class="hover:text-pink-400 transition-colors">
+                                <VolumeX v-if="isMuted || volume === 0" class="w-6 h-6 text-red-400" />
+                                <Volume2 v-else class="w-6 h-6" />
                             </button>
                             <input 
                                 type="range" 
                                 v-model="volume" 
                                 min="0" max="1" step="0.1"
                                 @input="videoRef!.volume = volume"
-                                class="w-0 group-hover/volume:w-20 transition-all origin-left accent-blue-500 h-1"
+                                class="w-0 group-hover/volume:w-24 transition-all origin-left accent-pink-500 h-1.5 bg-white/20 rounded-full cursor-pointer"
                             />
                         </div>
 
-                        <span class="text-xs opacity-70 font-mono">
-                            {{ title || 'Streaming Content' }}
-                        </span>
+                        <div class="flex items-center gap-2 text-[11px] font-mono text-white/60">
+                            <span>HD</span>
+                            <div class="w-1 h-1 bg-white/20 rounded-full"></div>
+                            <span>{{ title }}</span>
+                        </div>
                     </div>
 
-                    <div class="flex items-center gap-4">
-                        <button class="hover:rotate-45 transition-transform">
-                            <Settings class="w-5 h-5" />
+                    <div class="flex items-center gap-6">
+                        <button class="hover:rotate-90 transition-all duration-300 text-white/60 hover:text-white">
+                            <Settings class="w-6 h-6" />
                         </button>
-                        <button @click="toggleFullscreen" class="hover:scale-110 transition-transform">
-                            <Maximize class="w-5 h-5" />
+                        <button @click="toggleFullscreen" class="hover:scale-125 transition-transform text-white/60 hover:text-white">
+                            <Maximize class="w-6 h-6" />
                         </button>
                     </div>
                 </div>
@@ -150,9 +181,9 @@ onUnmounted(() => {
             <button 
                 v-if="!isPlaying && showControls" 
                 @click="togglePlay"
-                class="absolute inset-0 m-auto w-20 h-20 bg-blue-600/90 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-500 transition-all scale-100 hover:scale-110"
+                class="absolute inset-0 m-auto w-24 h-24 bg-gradient-to-br from-pink-600/90 to-purple-700/90 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-90 transition-all border border-white/20"
             >
-                <Play class="w-10 h-10 ml-1 fill-current" />
+                <Play class="w-12 h-12 ml-1 fill-current shadow-black" />
             </button>
         </Transition>
     </div>
