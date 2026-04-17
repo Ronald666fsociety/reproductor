@@ -16,7 +16,10 @@ class CategoryController extends Controller
         // Seguridad: Limpiar categorías desbloqueadas al volver al índice
         session()->forget('unlocked_categories');
 
-        $categories = Category::withCount('videos')->orderBy('order')->get();
+        $categories = Category::where('user_id', auth()->id())
+            ->withCount('videos')
+            ->orderBy('order')
+            ->get();
         
         return Inertia::render('Categories/Index', [
             'categories' => $categories->map(function ($category) {
@@ -33,6 +36,10 @@ class CategoryController extends Controller
 
     public function show(Category $category)
     {
+        if ($category->user_id !== auth()->id()) {
+            abort(403, 'Acceso denegado.');
+        }
+
         $unlockedCategories = session('unlocked_categories', []);
 
         if (!empty($category->password) && !in_array($category->id, $unlockedCategories)) {
@@ -46,6 +53,10 @@ class CategoryController extends Controller
 
     public function unlock(Request $request, Category $category)
     {
+        if ($category->user_id !== $request->user()->id) {
+            abort(403, 'Acceso denegado.');
+        }
+
         $request->validate([
             'password' => 'required|string',
         ]);

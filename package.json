@@ -24,6 +24,8 @@
         "vue-tsc": "^2.0.24"
     },
     "dependencies": {
-        "lucide-vue-next": "^0.562.0"
+        "lucide-vue-next": "^0.562.0",
+        "plyr": "^3.8.4",
+        "sweetalert2": "^11.26.24"
     }
 }

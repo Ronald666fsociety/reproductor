@@ -1,323 +1,189 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import { Play, Pause, Volume2, VolumeX, Maximize, Settings } from 'lucide-vue-next';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
+import Plyr from 'plyr';
+import 'plyr/dist/plyr.css';
+import { Music } from 'lucide-vue-next';
 
 const props = defineProps<{
     src: string;
     title?: string;
-    quality?: string;
 }>();
 
-const videoRef = ref<HTMLVideoElement | null>(null);
-const isPlaying = ref(false);
-const isMuted = ref(false);
-const progress = ref(0);
-const currentTime = ref(0);
-const duration = ref(0);
-const volume = ref(1);
+const videoElement = ref<HTMLVideoElement | null>(null);
 const videoError = ref(false);
-const skipMessage = ref('');
-let skipTimeout: any = null;
-let controlsTimeout: any = null;
-
-const isScrubbing = ref(false);
-const progressBarRef = ref<HTMLElement | null>(null);
-
-const formatTime = (time: number) => {
-    if (isNaN(time) || !isFinite(time)) return '00:00';
-    const min = Math.floor(time / 60);
-    const sec = Math.floor(time % 60);
-    return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-};
-
-const showSkipFeedback = (msg: string) => {
-    skipMessage.value = msg;
-    clearTimeout(skipTimeout);
-    skipTimeout = setTimeout(() => skipMessage.value = '', 600);
-};
-
-const handleVideoError = () => {
-    videoError.value = true;
-    isPlaying.value = false;
-};
-
-const togglePlay = () => {
-    if (!videoRef.value) return;
-    if (isPlaying.value) {
-        videoRef.value.pause();
-    } else {
-        videoRef.value.play();
-    }
-    isPlaying.value = !isPlaying.value;
-};
-
-const toggleMute = () => {
-    if (!videoRef.value) return;
-    isMuted.value = !isMuted.value;
-    videoRef.value.muted = isMuted.value;
-};
-
-const handleProgress = () => {
-    if (!videoRef.value || isScrubbing.value) return; // Don't snap back while dragging
-    currentTime.value = videoRef.value.currentTime;
-    duration.value = videoRef.value.duration || 0;
-    progress.value = (currentTime.value / duration.value) * 100;
-};
-
-const handleScrub = (e: MouseEvent) => {
-    if (!videoRef.value || !progressBarRef.value) return;
-    const vidDuration = videoRef.value.duration || 0;
-    if (!isFinite(vidDuration) || vidDuration === 0) return;
-
-    const rect = progressBarRef.value.getBoundingClientRect();
-    const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    videoRef.value.currentTime = pos * vidDuration;
-    
-    currentTime.value = videoRef.value.currentTime;
-    progress.value = pos * 100;
-};
-
-const startScrubbing = (e: MouseEvent) => {
-    isScrubbing.value = true;
-    handleScrub(e);
-    window.addEventListener('mousemove', handleScrub);
-    window.addEventListener('mouseup', stopScrubbing);
-};
-
-const stopScrubbing = () => {
-    isScrubbing.value = false;
-    window.removeEventListener('mousemove', handleScrub);
-    window.removeEventListener('mouseup', stopScrubbing);
-};
-
-const toggleFullscreen = () => {
-    if (!videoRef.value) return;
-    if (videoRef.value.requestFullscreen) {
-        videoRef.value.requestFullscreen();
-    }
-};
-
-const handleMouseMove = () => {
-    showControls.value = true;
-    clearTimeout(controlsTimeout);
-    controlsTimeout = setTimeout(() => {
-        if (isPlaying.value) showControls.value = false;
-    }, 3000);
-};
-
-const handleKeyDown = (e: KeyboardEvent) => {
-    if (!videoRef.value) return;
-    
-    // Prevent scrolling when using space
-    if (e.code === 'Space') {
-        e.preventDefault();
-        togglePlay();
-    }
-    
-    if (e.code === 'ArrowUp') {
-        e.preventDefault();
-        volume.value = Math.min(1, volume.value + 0.1);
-        videoRef.value.volume = volume.value;
-        if (isMuted.value && volume.value > 0) isMuted.value = false;
-        showControls.value = true;
-    }
-    
-    if (e.code === 'ArrowDown') {
-        e.preventDefault();
-        volume.value = Math.max(0, volume.value - 0.1);
-        videoRef.value.volume = volume.value;
-        showControls.value = true;
-    }
-
-    if (e.code === 'KeyM') {
-        toggleMute();
-        showControls.value = true;
-    }
-
-    if (e.code === 'KeyL' || e.code === 'ArrowRight') {
-        e.preventDefault();
-        videoRef.value.currentTime += 10;
-        showSkipFeedback('⏭ +10s');
-        showControls.value = true;
-    }
-    
-    if (e.code === 'KeyJ' || e.code === 'ArrowLeft') {
-        e.preventDefault();
-        videoRef.value.currentTime -= 10;
-        showSkipFeedback('⏮ -10s');
-        showControls.value = true;
-    }
-
-    if (e.code === 'KeyF') {
-        e.preventDefault();
-        toggleFullscreen();
-    }
-};
+let player: Plyr | null = null;
 
 onMounted(() => {
-    if (videoRef.value) {
-        videoRef.value.addEventListener('loadedmetadata', () => {
-            if (videoRef.value) duration.value = videoRef.value.duration || 0;
+    if (videoElement.value) {
+        player = new Plyr(videoElement.value, {
+            controls: [
+                'play-large',
+                'play',
+                'progress',
+                'current-time',
+                'duration',
+                'mute',
+                'volume',
+                'captions',
+                'settings',
+                'pip',
+                'fullscreen',
+            ],
+            settings: ['quality', 'speed', 'loop'],
+            speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
+            keyboard: { focused: true, global: true },
+            tooltips: { controls: true, seek: true },
+            i18n: {
+                restart: 'Reiniciar',
+                play: 'Reproducir',
+                pause: 'Pausar',
+                fastForward: 'Adelantar 10s',
+                seek: 'Buscar',
+                seekLabel: '{currentTime} de {duration}',
+                played: 'Reproducido',
+                buffered: 'Almacenado en buffer',
+                currentTime: 'Tiempo actual',
+                duration: 'Duración',
+                volume: 'Volumen',
+                mute: 'Silenciar',
+                unmute: 'Activar sonido',
+                download: 'Descargar',
+                enterFullscreen: 'Pantalla completa',
+                exitFullscreen: 'Salir de pantalla completa',
+                frameTitle: 'Reproductor para {title}',
+                settings: 'Configuración',
+                speed: 'Velocidad',
+                normal: 'Normal',
+                quality: 'Calidad',
+                loop: 'Bucle',
+            }
         });
-        videoRef.value.addEventListener('timeupdate', handleProgress);
-        videoRef.value.addEventListener('ended', () => isPlaying.value = false);
-        window.addEventListener('keydown', handleKeyDown);
+        
+        // Error handling
+        videoElement.value.addEventListener('error', () => {
+            videoError.value = true;
+        });
+        videoElement.value.addEventListener('loadeddata', () => {
+            videoError.value = false;
+        });
     }
 });
 
 onUnmounted(() => {
-    if (videoRef.value) {
-        videoRef.value.removeEventListener('timeupdate', handleProgress);
+    if (player) {
+        player.destroy();
     }
-    window.removeEventListener('keydown', handleKeyDown);
-    window.removeEventListener('mousemove', handleScrub);
-    window.removeEventListener('mouseup', stopScrubbing);
-    clearTimeout(controlsTimeout);
+});
+
+// React to source changes if parent component swaps the video
+watch(() => props.src, () => {
+    if (player) {
+        player.source = {
+            type: 'video',
+            sources: [
+                {
+                    src: props.src,
+                    type: 'video/mp4',
+                },
+            ],
+        };
+        videoError.value = false;
+        
+        // Auto-play the new video immediately to avoid the "double click to play" issue
+        // We use a slight delay to ensure Plyr has completely loaded the new source
+        setTimeout(() => {
+            player?.play().catch(e => console.log('Autoplay prevented', e));
+        }, 150);
+    }
 });
 </script>
 
 <template>
-    <div 
-        class="relative group bg-black rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] aspect-video border border-white/10"
-        @mousemove="handleMouseMove"
-        @mouseleave="showControls = false"
-    >
-        <video 
-            ref="videoRef"
-            :src="src"
-            class="w-full h-full object-contain cursor-pointer"
-            @click="togglePlay"
-            @dblclick="toggleFullscreen"
-            @error="handleVideoError"
-            @loadeddata="videoError = false"
-        ></video>
-
+    <div class="plyr-container relative rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-white/10 bg-black w-full aspect-video max-h-[70vh] flex items-center justify-center">
+        
         <!-- Error Overlay -->
         <div v-if="videoError" class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-900/90 backdrop-blur-sm p-6 text-center">
             <div class="p-4 bg-red-500/20 rounded-full mb-4">
                 <Music class="w-12 h-12 text-red-500 animate-pulse" />
             </div>
             <h4 class="text-xl font-black text-white mb-2 uppercase tracking-tighter">Video no disponible</h4>
-            <p class="text-white/40 text-sm max-w-xs">El archivo de video no pudo cargarse. Esto puede deberse a un error durante la subida o a que el archivo ya no existe en el servidor.</p>
-            <button @click="videoError = false; videoRef?.load()" class="mt-6 px-6 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl transition-all border border-white/10">REINTENTAR CARGA</button>
+            <p class="text-white/40 text-sm max-w-xs">El archivo de video no pudo cargarse o su formato es incompatible.</p>
+            <button @click="videoError = false; player?.play()" class="mt-6 px-6 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl transition-all border border-white/10">REINTENTAR CARGA</button>
         </div>
 
-        <!-- Overlay Controls -->
-        <Transition name="fade">
-            <div v-show="showControls || !isPlaying" class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/20 flex flex-col justify-end p-6 transition-opacity duration-300 pointer-events-none">
-                
-                <!-- Title & Quality -->
-                <div v-if="title" class="absolute top-6 left-6 flex items-center gap-3 pointer-events-auto">
-                    <span class="text-white font-bold drop-shadow-lg text-lg">{{ title }}</span>
-                    <span class="px-1.5 py-0.5 bg-white/10 backdrop-blur-md rounded text-[10px] font-bold text-white border border-white/20 whitespace-nowrap">{{ quality || '1080p HD' }}</span>
-                </div>
-
-                <!-- Progress Bar -->
-                <div 
-                    ref="progressBarRef"
-                    class="w-full h-1.5 bg-white/10 rounded-full mb-6 cursor-pointer relative group/progress transition-all hover:h-2 pointer-events-auto"
-                    @mousedown.prevent="startScrubbing"
-                >
-                    <div 
-                        class="absolute top-0 left-0 h-full bg-gradient-to-r from-pink-500 to-purple-600 rounded-full shadow-[0_0_15px_rgba(236,72,153,0.5)]"
-                        :style="{ width: progress + '%' }"
-                    ></div>
-                    <!-- Hover seeker -->
-                    <div class="absolute -top-10 left-0 opacity-0 group-hover/progress:opacity-100 transition-opacity bg-white/90 text-black text-[10px] font-bold px-2 py-1 rounded-lg pointer-events-none">
-                        Previsualizar
-                    </div>
-                </div>
-
-                <!-- Bottom Controls -->
-                <div class="flex items-center justify-between text-white pointer-events-auto">
-                    <div class="flex items-center gap-6">
-                        <button @click="togglePlay" class="hover:scale-125 transition-transform active:scale-95 text-pink-500">
-                            <Play v-if="!isPlaying" class="w-8 h-8 fill-current" />
-                            <Pause v-else class="w-8 h-8 fill-current" />
-                        </button>
-                        
-                        <div class="flex items-center gap-3 group/volume">
-                             <button @click="toggleMute" class="hover:text-pink-400 transition-colors">
-                                <VolumeX v-if="isMuted || volume === 0" class="w-6 h-6 text-red-400" />
-                                <Volume2 v-else class="w-6 h-6" />
-                            </button>
-                            <input 
-                                type="range" 
-                                v-model="volume" 
-                                min="0" max="1" step="0.1"
-                                @input="videoRef!.volume = volume"
-                                class="w-0 group-hover/volume:w-24 transition-all origin-left accent-pink-500 h-1.5 bg-white/20 rounded-full cursor-pointer"
-                            />
-                        </div>
-
-                        <!-- Tiempo de reproducción (Playback Status) -->
-                        <div class="text-white text-xs font-mono font-medium tracking-wider opacity-80 select-none">
-                            {{ formatTime(currentTime) }} / {{ formatTime(duration) }}
-                        </div>
-
-                    </div>
-
-                    <div class="flex items-center gap-6">
-                        <button class="hover:rotate-90 transition-all duration-300 text-white/60 hover:text-white">
-                            <Settings class="w-6 h-6" />
-                        </button>
-                        <button @click="toggleFullscreen" class="hover:scale-125 transition-transform text-white/60 hover:text-white">
-                            <Maximize class="w-6 h-6" />
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </Transition>
-
-        <!-- Skip Feedback Indicator -->
-        <Transition name="fade">
-            <div v-if="skipMessage" class="absolute inset-0 m-auto w-24 h-24 bg-black/50 backdrop-blur-md text-white rounded-full flex items-center justify-center font-bold text-lg shadow-2xl pointer-events-none">
-                {{ skipMessage }}
-            </div>
-        </Transition>
-
-        <!-- Centered Play/Pause Big Icon -->
-
-        <Transition name="scale">
-            <button 
-                v-if="!isPlaying && showControls" 
-                @click="togglePlay"
-                class="absolute inset-0 m-auto w-24 h-24 bg-gradient-to-br from-pink-600/90 to-purple-700/90 text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-90 transition-all border border-white/20"
-            >
-                <Play class="w-12 h-12 ml-1 fill-current shadow-black" />
-            </button>
-        </Transition>
+        <!-- Plyr Video Element -->
+        <video 
+            ref="videoElement" 
+            playsinline 
+            controls 
+            crossorigin
+            class="plyr-video"
+        >
+            <source :src="src" type="video/mp4" />
+        </video>
+        
+        <!-- Custom Title Overlay -->
+        <div v-if="title && !videoError" class="absolute top-4 left-4 z-10 pointer-events-none fade-out-on-play">
+            <span class="px-3 py-1 bg-black/60 backdrop-blur-md rounded-lg text-white font-bold drop-shadow-lg text-sm border border-white/10">{{ title }}</span>
+        </div>
     </div>
 </template>
 
-<style scoped>
-.fade-enter-active, .fade-leave-active {
+<style>
+/* Plyr overrides for our premium pink theme */
+.plyr-container {
+    --plyr-color-main: #ec4899; /* Pink-500 */
+    --plyr-video-background: #000;
+    --plyr-menu-background: rgba(17, 24, 39, 0.95);
+    --plyr-menu-border-color: rgba(255, 255, 255, 0.1);
+    --plyr-menu-color: #fff;
+    --plyr-tooltip-background: rgba(17, 24, 39, 0.9);
+    --plyr-font-family: inherit;
+    --plyr-video-control-background-hover: rgba(236, 72, 153, 1);
+}
+
+.plyr {
+    width: 100%;
+    height: 100%;
+}
+
+.plyr__video-wrapper {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+}
+
+video {
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.plyr--video .plyr__controls {
+    background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.9));
+    padding: 30px 20px 20px !important;
+}
+
+.plyr__control--overlaid {
+    background: rgba(236, 72, 153, 0.8) !important;
+}
+
+.plyr__control--overlaid:hover {
+    background: #ec4899 !important;
+    transform: scale(1.1);
+}
+
+.plyr__menu__container {
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.fade-out-on-play {
     transition: opacity 0.3s ease;
 }
-.fade-enter-from, .fade-leave-to {
+.plyr--playing .fade-out-on-play {
     opacity: 0;
-}
-
-.scale-enter-active, .scale-leave-active {
-    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
-}
-.scale-enter-from, .scale-leave-to {
-    transform: scale(0.5);
-    opacity: 0;
-}
-
-input[type="range"] {
-    -webkit-appearance: none;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 5px;
-}
-
-input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    height: 12px;
-    width: 12px;
-    border-radius: 50%;
-    background: #3b82f6;
-    cursor: pointer;
 }
 </style>

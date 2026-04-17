@@ -14,29 +14,41 @@ class VideoController extends Controller
     public function upload(Request $request)
     {
         $request->validate([
-            'video' => 'required|mimes:mp4,mov,ogg,qt|max:2097152', // 2GB limit
+            'video' => 'required|max:2097152', // 2GB limit, todo tipo de archivos permitidos
             'category_id' => 'required|exists:categories,id',
             'title' => 'required|string|max:255',
         ]);
 
+        $category = Category::findOrFail($request->category_id);
+        if ($category->user_id !== auth()->id()) {
+            abort(403, 'Acceso denegado.');
+        }
+
         if ($request->hasFile('video')) {
-            $path = $request->file('video')->store('videos', 'public');
+            $file = $request->file('video');
+            $mimeType = $file->getMimeType();
+            $path = $file->store('videos', 'public');
             
-            // Generar miniatura con FFmpeg
-            $thumbnailPath = 'thumbnails/' . Str::random(40) . '.jpg';
-            $fullVideoPath = storage_path('app/public/' . $path);
-            $fullThumbnailPath = storage_path('app/public/' . $thumbnailPath);
+            $finalThumbnailPath = null;
             
-            if (!file_exists(storage_path('app/public/thumbnails'))) {
-                mkdir(storage_path('app/public/thumbnails'), 0755, true);
+            if (str_starts_with($mimeType, 'video/')) {
+                // Generar miniatura con FFmpeg
+                $thumbnailPath = 'thumbnails/' . Str::random(40) . '.jpg';
+                $fullVideoPath = storage_path('app/public/' . $path);
+                $fullThumbnailPath = storage_path('app/public/' . $thumbnailPath);
+                
+                if (!file_exists(storage_path('app/public/thumbnails'))) {
+                    mkdir(storage_path('app/public/thumbnails'), 0755, true);
+                }
+
+                $command = "ffmpeg -i \"$fullVideoPath\" -ss 00:00:01.000 -vframes 1 \"$fullThumbnailPath\" 2>&1";
+                exec($command, $output, $returnVar);
+
+                $finalThumbnailPath = ($returnVar === 0 && file_exists($fullThumbnailPath)) ? $thumbnailPath : null;
+            } elseif (str_starts_with($mimeType, 'image/')) {
+                // Para las imágenes, la foto en sí es la miniatura
+                $finalThumbnailPath = $path;
             }
-
-            // Comando FFmpeg para extraer el frame del segundo 1
-            $command = "ffmpeg -i \"$fullVideoPath\" -ss 00:00:01.000 -vframes 1 \"$fullThumbnailPath\" 2>&1";
-            exec($command, $output, $returnVar);
-
-            // Si falla FFmpeg, podemos registrar el error pero seguir guardando el video
-            $finalThumbnailPath = ($returnVar === 0 && file_exists($fullThumbnailPath)) ? $thumbnailPath : null;
 
             // Guardar en la base de datos
             Video::create([
@@ -44,23 +56,46 @@ class VideoController extends Controller
                 'title' => $request->title,
                 'path' => $path,
                 'thumbnail_path' => $finalThumbnailPath,
+                'file_type' => $mimeType,
                 'order' => Video::where('category_id', $request->category_id)->count() + 1,
             ]);
 
-            return back()->with('success', 'Video subido y procesado con éxito.');
+            return back()->with('success', 'Archivo subido y procesado con éxito.');
         }
 
-        return back()->with('error', 'Error al subir el video.');
+        return back()->with('error', 'Error al subir el archivo.');
+    }
+
+    public function stream(Video $video)
+    {
+        // Protección: Solo el dueño de la categoría o el admin mundial puede ver el archivo
+        if ($video->category->user_id !== auth()->id() && !auth()->user()->is_admin) {
+            abort(403, 'Acceso denegado.');
+        }
+
+        $path = storage_path('app/public/' . $video->path);
+        
+        if (!file_exists($path)) {
+            abort(404, 'El archivo no existe.');
+        }
+
+        // response()->file() de Symfony maneja autómaticamente cabeceras de rango (HTTP 206)
+        // Esto es la magia que permite que la barra de tiempo funcione al adelantar.
+        return response()->file($path);
     }
 
     public function destroy(Video $video)
     {
+        if ($video->category->user_id !== auth()->id()) {
+            abort(403, 'Acceso denegado.');
+        }
+
         Storage::disk('public')->delete($video->path);
         if ($video->thumbnail_path) {
             Storage::disk('public')->delete($video->thumbnail_path);
         }
         $video->delete();
         
-        return back()->with('success', 'Video eliminado.');
+        return back()->with('success', 'Archivo eliminado.');
     }
 }

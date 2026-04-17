@@ -33,6 +33,8 @@ const unlockForm = useForm({
 
 const submitCreate = () => {
     createForm.post(route('categories.store'), {
+        preserveScroll: true,
+        preserveState: false,
         onSuccess: () => {
             showCreateModal.value = false;
             createForm.reset();
@@ -57,7 +59,10 @@ const submitUnlock = () => {
 
 const deleteCategory = (id: number) => {
     if (confirm('¿Estás seguro de eliminar esta sección y todos sus videos?')) {
-        useForm({}).delete(route('categories.destroy', id));
+        useForm({}).delete(route('categories.destroy', id), {
+            preserveScroll: true,
+            preserveState: false,
+        });
     }
 };
 </script>
@@ -72,7 +77,6 @@ const deleteCategory = (id: number) => {
                     Explorar Contenido
                 </h2>
                 <button 
-                    v-if="user.is_admin"
                     @click="showCreateModal = true"
                     class="flex items-center gap-2 bg-gradient-to-r from-pink-600 to-purple-700 hover:from-pink-700 hover:to-purple-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg transition-all hover:scale-105 active:scale-95"
                 >
@@ -106,7 +110,7 @@ const deleteCategory = (id: number) => {
                                     <Lock v-if="category.is_locked" class="w-7 h-7 text-pink-500" />
                                     <Unlock v-else class="w-7 h-7 text-green-500" />
                                 </div>
-                                <div v-if="user.is_admin" class="flex gap-2">
+                                <div class="flex gap-2">
                                     <button @click="deleteCategory(category.id)" class="p-2.5 glass rounded-xl text-white/20 hover:text-red-500 hover:bg-red-500/10 transition-all">
                                         <Trash2 class="w-4 h-4" />
                                     </button>
@@ -143,10 +147,7 @@ const deleteCategory = (id: number) => {
                         <!-- Card Decorative Gradient -->
                         <div class="absolute -bottom-10 -right-10 w-32 h-32 bg-pink-600/10 blur-[50px] rounded-full group-hover:bg-pink-600/20 transition-all duration-700"></div>
 
-                        <!-- Admin Badge -->
-                        <div v-if="user.is_admin" class="absolute top-0 right-0 m-4 px-2 py-0.5 bg-yellow-500/20 text-yellow-500 text-[10px] font-bold uppercase rounded-md border border-yellow-500/50">
-                            Admin
-                        </div>
+                        <!-- Gradient Decorative End -->
                     </div>
                 </div>
             </div>

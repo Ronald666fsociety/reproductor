@@ -20,6 +20,7 @@ class AdminCategoryController extends Controller
         ]);
 
         Category::create([
+            'user_id' => auth()->id(),
             'name' => $validated['name'],
             'slug' => Str::slug($validated['name']),
             'password' => $validated['password'] ? Hash::make($validated['password']) : null,
@@ -31,6 +32,10 @@ class AdminCategoryController extends Controller
 
     public function update(Request $request, Category $category)
     {
+        if ($category->user_id !== auth()->id()) {
+            abort(403, 'Acceso denegado.');
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'password' => 'nullable|string|min:4',
@@ -53,6 +58,10 @@ class AdminCategoryController extends Controller
 
     public function destroy(Category $category)
     {
+        if ($category->user_id !== auth()->id()) {
+            abort(403, 'Acceso denegado.');
+        }
+
         $category->delete();
         return back()->with('success', 'Sección eliminada.');
     }
