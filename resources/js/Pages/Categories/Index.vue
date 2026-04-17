@@ -91,48 +91,57 @@ const deleteCategory = (id: number) => {
                     <p class="text-white/40 mt-2">Comienza agregando una nueva sección desde el panel.</p>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     <div 
                         v-for="category in categories" 
                         :key="category.id"
-                        class="group relative bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl overflow-hidden hover:border-pink-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-pink-500/10"
+                        class="group relative glass-premium rounded-[2.5rem] overflow-hidden transition-all duration-500 hover:scale-[1.03] hover:shadow-[0_20px_50px_rgba(236,72,153,0.15)]"
                     >
-                        <div class="p-6">
-                            <div class="flex justify-between items-start mb-4">
-                                <div class="p-3 bg-white/5 rounded-2xl group-hover:scale-110 transition-transform duration-300">
-                                    <Lock v-if="category.is_locked" class="w-6 h-6 text-pink-400" />
-                                    <Unlock v-else class="w-6 h-6 text-green-400" />
+                        <!-- Card Border Glow -->
+                        <div class="absolute inset-0 border border-white/10 group-hover:border-pink-500/30 rounded-[2.5rem] transition-colors duration-500"></div>
+
+                        <div class="p-8 relative z-10">
+                            <div class="flex justify-between items-start mb-6">
+                                <div class="p-4 bg-white/5 backdrop-blur-3xl rounded-3xl group-hover:bg-pink-500/10 group-hover:scale-110 transition-all duration-500 border border-white/5">
+                                    <Lock v-if="category.is_locked" class="w-7 h-7 text-pink-500" />
+                                    <Unlock v-else class="w-7 h-7 text-green-500" />
                                 </div>
                                 <div v-if="user.is_admin" class="flex gap-2">
-                                    <button @click="deleteCategory(category.id)" class="p-2 text-white/20 hover:text-red-400 transition-colors">
+                                    <button @click="deleteCategory(category.id)" class="p-2.5 glass rounded-xl text-white/20 hover:text-red-500 hover:bg-red-500/10 transition-all">
                                         <Trash2 class="w-4 h-4" />
                                     </button>
                                 </div>
                             </div>
 
-                            <h3 class="text-xl font-bold text-white mb-1">{{ category.name }}</h3>
-                            <p class="text-white/40 text-sm mb-6">{{ category.videos_count }} videos disponibles</p>
+                            <h3 class="text-2xl font-black text-white mb-2 tracking-tight group-hover:text-pink-400 transition-colors">{{ category.name }}</h3>
+                            <div class="flex items-center gap-2 mb-8">
+                                <div class="w-1.5 h-1.5 rounded-full bg-pink-500 animate-pulse"></div>
+                                <p class="text-white/40 text-xs font-bold uppercase tracking-widest">{{ category.videos_count }} Contenidos Disponibles</p>
+                            </div>
 
                             <div v-if="category.is_locked">
                                 <button 
                                     @click="openUnlock(category)"
-                                    class="w-full flex items-center justify-center gap-2 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-2xl transition-all border border-white/10"
+                                    class="w-full flex items-center justify-center gap-3 py-4 glass border-white/10 hover:bg-white/10 text-white font-black rounded-2xl transition-all group/btn"
                                 >
-                                    <Lock class="w-4 h-4" />
-                                    Desbloquear Sección
+                                    <Lock class="w-4 h-4 text-pink-500 group-hover/btn:scale-125 transition-transform" />
+                                    DESBLOQUEAR AHORA
                                 </button>
                             </div>
                             <div v-else>
                                 <Link 
                                     :href="route('categories.show', category.id)"
-                                    class="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-pink-600 to-purple-700 text-white font-bold rounded-2xl transition-all"
+                                    class="w-full flex items-center justify-center gap-3 py-4 bg-gradient-to-r from-pink-600 to-purple-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-pink-900/40 hover:shadow-pink-600/50 group/btn"
                                 >
-                                    <PlayCircle class="w-4 h-4" />
-                                    Acceder al Contenido
-                                    <ArrowRight class="w-4 h-4" />
+                                    <PlayCircle class="w-5 h-5 group-hover/btn:scale-125 transition-transform" />
+                                    ENTRAR A LA SECCIÓN
+                                    <ArrowRight class="w-4 h-4 group-hover/btn:translate-x-1 transition-transform" />
                                 </Link>
                             </div>
                         </div>
+
+                        <!-- Card Decorative Gradient -->
+                        <div class="absolute -bottom-10 -right-10 w-32 h-32 bg-pink-600/10 blur-[50px] rounded-full group-hover:bg-pink-600/20 transition-all duration-700"></div>
 
                         <!-- Admin Badge -->
                         <div v-if="user.is_admin" class="absolute top-0 right-0 m-4 px-2 py-0.5 bg-yellow-500/20 text-yellow-500 text-[10px] font-bold uppercase rounded-md border border-yellow-500/50">
@@ -144,22 +153,23 @@ const deleteCategory = (id: number) => {
         </div>
 
         <!-- Create Category Modal (Simulated for speed, but actual implementation would use a proper Modal component) -->
-        <div v-if="showCreateModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div class="bg-gray-900 border border-white/20 w-full max-w-md rounded-3xl p-8 shadow-2xl">
-                <h3 class="text-2xl font-bold text-white mb-6">Nueva Sección</h3>
-                <form @submit.prevent="submitCreate" class="space-y-4">
+        <div v-if="showCreateModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+            <div class="glass-premium w-full max-w-md rounded-[2rem] p-10 shadow-3xl border-white/20 animate-in fade-in zoom-in duration-300">
+                <h3 class="text-3xl font-black text-white mb-2 tracking-tighter">Nueva Sección</h3>
+                <p class="text-white/40 mb-8 text-sm font-bold uppercase tracking-widest">Configura tu nuevo canal de contenido</p>
+                <form @submit.prevent="submitCreate" class="space-y-6">
                     <div>
-                        <label class="block text-sm font-medium text-white/60 mb-2">Nombre de la Sección</label>
-                        <input v-model="createForm.name" type="text" class="w-full bg-white/5 border-white/10 rounded-xl text-white focus:ring-pink-500" required />
+                        <label class="block text-xs font-black text-white/40 uppercase tracking-widest mb-3">Nombre de la Sección</label>
+                        <input v-model="createForm.name" type="text" class="w-full bg-white/5 border-white/10 rounded-2xl py-4 px-5 text-white focus:ring-pink-500 focus:border-pink-500 transition-all font-bold placeholder-white/20" placeholder="Ej: Contenido VIP" required />
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-white/60 mb-2">Contraseña (opcional)</label>
-                        <input v-model="createForm.password" type="password" class="w-full bg-white/5 border-white/10 rounded-xl text-white focus:ring-pink-500" />
-                        <p class="text-[10px] text-white/30 mt-1">Deja vacío para acceso sin clave.</p>
+                        <label class="block text-xs font-black text-white/40 uppercase tracking-widest mb-3">Contraseña Maestra</label>
+                        <input v-model="createForm.password" type="password" class="w-full bg-white/5 border-white/10 rounded-2xl py-4 px-5 text-white focus:ring-pink-500 focus:border-pink-500 transition-all font-bold placeholder-white/20" placeholder="••••••••" />
+                        <p class="text-[10px] text-white/20 mt-3 font-bold">Opcional: Si no pones clave, la sección será pública para todos los usuarios logueados.</p>
                     </div>
                     <div class="flex gap-4 pt-4">
-                        <button type="button" @click="showCreateModal = false" class="flex-1 py-3 text-white/60 font-bold">Cancelar</button>
-                        <button type="submit" class="flex-1 py-3 bg-pink-600 text-white font-bold rounded-xl shadow-lg shadow-pink-900/40">Crear</button>
+                        <button type="button" @click="showCreateModal = false" class="flex-1 py-4 text-white/40 font-black hover:text-white transition-colors">CANCELAR</button>
+                        <button type="submit" class="flex-1 py-4 bg-gradient-to-r from-pink-600 to-purple-700 text-white font-black rounded-2xl shadow-xl shadow-pink-900/40 hover:scale-[1.05] transition-all">CREAR SECCIÓN</button>
                     </div>
                 </form>
             </div>

@@ -12,3 +12,31 @@
 .glass {
   @apply bg-white/5 backdrop-blur-xl border border-white/10;
 }
+
+.glass-premium {
+  @apply bg-white/5 backdrop-blur-2xl border border-white/20 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)];
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-950;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full border-2 border-slate-950 hover:bg-pink-500/50 transition-colors;
+}
+
+/* Transitions */
+.page-enter-active,
+.page-leave-active {
+  @apply transition-opacity duration-300;
+}
+
+.page-enter-from,
+.page-leave-to {
+  @apply opacity-0;
+}

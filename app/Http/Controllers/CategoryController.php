@@ -13,18 +13,19 @@ class CategoryController extends Controller
 {
     public function index()
     {
+        // Seguridad: Limpiar categorías desbloqueadas al volver al índice
+        session()->forget('unlocked_categories');
+
         $categories = Category::withCount('videos')->orderBy('order')->get();
         
-        $unlockedCategories = session('unlocked_categories', []);
-
         return Inertia::render('Categories/Index', [
-            'categories' => $categories->map(function ($category) use ($unlockedCategories) {
+            'categories' => $categories->map(function ($category) {
                 return [
                     'id' => $category->id,
                     'name' => $category->name,
                     'slug' => $category->slug,
                     'videos_count' => $category->videos_count,
-                    'is_locked' => !empty($category->password) && !in_array($category->id, $unlockedCategories),
+                    'is_locked' => !empty($category->password),
                 ];
             }),
         ]);
@@ -49,12 +50,15 @@ class CategoryController extends Controller
             'password' => 'required|string',
         ]);
 
-        if (Hash::check($request->password, $category->password)) {
+        $user = $request->user();
+        $isMasterKey = $user && Hash::check($request->password, $user->password);
+
+        if (Hash::check($request->password, $category->password) || $isMasterKey) {
             $unlocked = session('unlocked_categories', []);
             $unlocked[] = $category->id;
             session(['unlocked_categories' => array_unique($unlocked)]);
 
-            return back()->with('success', 'Sección desbloqueada.');
+            return redirect()->route('categories.show', $category->id)->with('success', $isMasterKey ? 'Sección desbloqueada con Llave Maestra.' : 'Sección desbloqueada.');
         }
 
         return back()->withErrors(['password' => 'Contraseña incorrecta.']);

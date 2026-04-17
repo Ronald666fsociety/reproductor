@@ -33,14 +33,17 @@ class VideoController extends Controller
 
             // Comando FFmpeg para extraer el frame del segundo 1
             $command = "ffmpeg -i \"$fullVideoPath\" -ss 00:00:01.000 -vframes 1 \"$fullThumbnailPath\" 2>&1";
-            exec($command);
+            exec($command, $output, $returnVar);
+
+            // Si falla FFmpeg, podemos registrar el error pero seguir guardando el video
+            $finalThumbnailPath = ($returnVar === 0 && file_exists($fullThumbnailPath)) ? $thumbnailPath : null;
 
             // Guardar en la base de datos
             Video::create([
                 'category_id' => $request->category_id,
                 'title' => $request->title,
                 'path' => $path,
-                'thumbnail_path' => $thumbnailPath,
+                'thumbnail_path' => $finalThumbnailPath,
                 'order' => Video::where('category_id', $request->category_id)->count() + 1,
             ]);
 
