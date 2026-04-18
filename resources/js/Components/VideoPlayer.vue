@@ -92,7 +92,10 @@ watch(() => props.src, () => {
         // Auto-play the new video immediately to avoid the "double click to play" issue
         // We use a slight delay to ensure Plyr has completely loaded the new source
         setTimeout(() => {
-            player?.play().catch(e => console.log('Autoplay prevented', e));
+            const playPromise = player?.play();
+            if (playPromise !== undefined) {
+                playPromise.catch((e: any) => console.log('Autoplay prevented', e));
+            }
         }, 150);
     }
 });
@@ -116,7 +119,7 @@ watch(() => props.src, () => {
             ref="videoElement" 
             playsinline 
             controls 
-            crossorigin
+            crossorigin="anonymous"
             class="plyr-video"
         >
             <source :src="src" type="video/mp4" />
