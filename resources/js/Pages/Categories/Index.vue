@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Lock, Unlock, FolderPlus, Folder, Trash2, Edit3, PlayCircle, ArrowRight } from 'lucide-vue-next';
@@ -12,9 +12,37 @@ interface Category {
     is_locked: boolean;
 }
 
+interface Stats {
+    total_used: number;
+    disk_total: number;
+    disk_free: number;
+    file_types: Array<{ file_type: string, total_size: string, count: number }>;
+    deleted_count: number;
+}
+
 const props = defineProps<{
     categories: Category[];
+    stats: Stats;
 }>();
+
+const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+const diskUsagePercentage = computed(() => {
+    if (props.stats.disk_total === 0) return 0;
+    const used = props.stats.disk_total - props.stats.disk_free;
+    return Math.round((used / props.stats.disk_total) * 100);
+});
+
+const vaultUsagePercentage = computed(() => {
+    if (props.stats.disk_total === 0) return 0;
+    return Math.round((props.stats.total_used / props.stats.disk_total) * 100);
+});
 
 const user = (usePage().props.auth as any).user;
 const showCreateModal = ref(false);
@@ -89,6 +117,85 @@ const deleteCategory = (id: number) => {
         <div class="py-12">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
                 
+                <!-- Storage Dashboard -->
+                <div class="mb-12 grid grid-cols-1 lg:grid-cols-4 gap-6 animate-in fade-in slide-in-from-top duration-700">
+                    <!-- Disk Health Card -->
+                    <div class="lg:col-span-2 glass-premium rounded-[2.5rem] p-8 border border-white/10 relative overflow-hidden group">
+                        <div class="flex justify-between items-start mb-6">
+                            <div>
+                                <h3 class="text-[10px] font-black text-cyan-500 uppercase tracking-widest mb-1">Estado de Almacenamiento</h3>
+                                <p class="text-3xl font-black text-white tracking-tighter">Capacidad del Disco</p>
+                            </div>
+                            <div class="p-3 bg-cyan-500/10 rounded-2xl text-cyan-400">
+                                <Folder class="w-6 h-6" />
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="flex justify-between text-sm font-bold">
+                                <span class="text-white/40">Uso Total del Sistema</span>
+                                <span class="text-white">{{ diskUsagePercentage }}%</span>
+                            </div>
+                            <div class="w-full bg-white/5 rounded-full h-3 overflow-hidden border border-white/5">
+                                <div 
+                                    class="bg-gradient-to-r from-cyan-500 to-blue-600 h-full transition-all duration-1000 shadow-[0_0_15px_rgba(34,211,238,0.3)]"
+                                    :style="{ width: diskUsagePercentage + '%' }"
+                                ></div>
+                            </div>
+                            <div class="flex justify-between text-[10px] font-black uppercase tracking-wider text-white/30">
+                                <span>{{ formatSize(stats.disk_total - stats.disk_free) }} ocupado</span>
+                                <span>{{ formatSize(stats.disk_free) }} disponible</span>
+                            </div>
+                        </div>
+
+                        <!-- Abstract background element -->
+                        <div class="absolute -bottom-12 -right-12 w-48 h-48 bg-cyan-500/5 blur-[80px] rounded-full group-hover:bg-cyan-500/10 transition-all"></div>
+                    </div>
+
+                    <!-- Vault Specific Stats -->
+                    <div class="glass-premium rounded-[2.5rem] p-8 border border-white/10 relative overflow-hidden group">
+                        <h3 class="text-[10px] font-black text-pink-500 uppercase tracking-widest mb-1">Tu Bóveda Escaneada</h3>
+                        <p class="text-3xl font-black text-white tracking-tighter mb-6">{{ formatSize(stats.total_used) }}</p>
+                        
+                        <div class="space-y-4">
+                            <div class="flex justify-between text-xs font-bold text-white/40">
+                                <span>Impacto en Disco</span>
+                                <span>{{ vaultUsagePercentage }}%</span>
+                            </div>
+                            <div class="w-full bg-white/5 rounded-full h-2 overflow-hidden border border-white/5">
+                                <div 
+                                    class="bg-gradient-to-r from-pink-500 to-purple-600 h-full transition-all duration-1000"
+                                    :style="{ width: vaultUsagePercentage + '%' }"
+                                ></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- File Breakdown QuickView -->
+                    <div class="glass-premium rounded-[2.5rem] p-8 border border-white/10 relative overflow-hidden group">
+                        <h3 class="text-[10px] font-black text-purple-500 uppercase tracking-widest mb-4">Top Formatos</h3>
+                        <div class="space-y-3">
+                            <div v-for="type in stats.file_types.slice(0, 3)" :key="type.file_type" class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-white/40 truncate max-w-[80px]">{{ type.file_type.split('/')[1]?.toUpperCase() || 'OTRO' }}</span>
+                                <span class="text-xs font-black text-white px-2 py-0.5 bg-white/5 rounded-lg">{{ type.count }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Trash Quick Access (Admin Only) -->
+                    <Link v-if="user.is_admin" :href="route('admin.trash.index')" class="glass-premium rounded-[2.5rem] p-8 border border-white/10 relative overflow-hidden group border-red-500/20 hover:border-red-500/40 transition-all flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">Recuperación</h3>
+                            <p class="text-xl font-black text-white tracking-tighter">Papelera</p>
+                        </div>
+                        <div class="flex items-center justify-between mt-4">
+                            <span class="text-sm font-bold text-white/40">{{ stats.deleted_count }} items</span>
+                            <Trash2 class="w-5 h-5 text-red-500 group-hover:scale-125 transition-transform" />
+                        </div>
+                        <div class="absolute -bottom-8 -right-8 w-24 h-24 bg-red-500/5 blur-2xl rounded-full group-hover:bg-red-500/10 transition-all"></div>
+                    </Link>
+                </div>
+
                 <div v-if="categories.length === 0" class="text-center py-20 bg-white/5 backdrop-blur-md rounded-3xl border border-white/10">
                     <Folder class="w-16 h-16 text-white/20 mx-auto mb-4" />
                     <h3 class="text-xl font-medium text-white">No hay secciones todavía</h3>

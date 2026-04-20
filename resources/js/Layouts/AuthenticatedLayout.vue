@@ -6,9 +6,39 @@ import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link } from '@inertiajs/vue3';
-import { Home, Folder, User as UserIcon, LogOut, Search, Bell } from 'lucide-vue-next';
+import { Home, Folder, User as UserIcon, LogOut, Search, Bell, X, FileIcon, ChevronRight, Trash2, Activity } from 'lucide-vue-next';
+import axios from 'axios';
 
 const showingNavigationDropdown = ref(false);
+const searchQuery = ref('');
+const searchResults = ref<{categories: any[], files: any[]}>({categories: [], files: []});
+const isSearching = ref(false);
+const showSearchResults = ref(false);
+
+const performSearch = async () => {
+    if (searchQuery.value.length < 2) {
+        searchResults.value = {categories: [], files: []};
+        showSearchResults.value = false;
+        return;
+    }
+
+    isSearching.value = true;
+    try {
+        const response = await axios.get(route('api.search'), { params: { q: searchQuery.value } });
+        searchResults.value = response.data;
+        showSearchResults.value = true;
+    } catch (error) {
+        console.error('Error searching:', error);
+    } finally {
+        isSearching.value = false;
+    }
+};
+
+const clearSearch = () => {
+    searchQuery.value = '';
+    searchResults.value = {categories: [], files: []};
+    showSearchResults.value = false;
+};
 </script>
 
 <template>
@@ -54,23 +84,116 @@ const showingNavigationDropdown = ref(false);
                                     <Folder class="w-4 h-4 mr-2" />
                                     Secciones
                                 </NavLink>
-                                <NavLink
-                                    v-if="$page.props.auth.user.is_admin"
-                                    :href="route('admin.users.index')"
-                                    :active="route().current('admin.users.*')"
-                                    class="px-4 py-2 rounded-xl transition-all"
-                                >
-                                    <UserIcon class="w-4 h-4 mr-2" />
-                                    Usuarios
-                                </NavLink>
+                                    <NavLink
+                                        v-if="$page.props.auth.user.is_admin"
+                                        :href="route('admin.users.index')"
+                                        :active="route().current('admin.users.*')"
+                                        class="px-4 py-2 rounded-xl transition-all"
+                                    >
+                                        <UserIcon class="w-4 h-4 mr-2" />
+                                        Usuarios
+                                    </NavLink>
+                                    <NavLink
+                                        v-if="$page.props.auth.user.is_admin"
+                                        :href="route('admin.trash.index')"
+                                        :active="route().current('admin.trash.*')"
+                                        class="px-4 py-2 rounded-xl transition-all text-red-400 hover:text-red-300"
+                                    >
+                                        <Trash2 class="w-4 h-4 mr-2" />
+                                        Papelera
+                                    </NavLink>
+                                    <NavLink
+                                        v-if="$page.props.auth.user.is_admin"
+                                        :href="route('admin.audit-logs.index')"
+                                        :active="route().current('admin.audit-logs.*')"
+                                        class="px-4 py-2 rounded-xl transition-all text-cyan-400"
+                                    >
+                                        <Activity class="w-4 h-4 mr-2" />
+                                        Auditoría
+                                    </NavLink>
                             </div>
                         </div>
 
                         <div class="hidden sm:flex sm:items-center gap-6">
-                            <!-- Search (Decorative) -->
-                            <div class="relative hidden lg:block">
-                                <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                                <input type="text" placeholder="Buscar en la bóveda..." class="bg-cyan-950/20 border-cyan-500/20 rounded-full py-2.5 pl-10 pr-4 text-sm focus:ring-cyan-500/50 focus:border-cyan-500/50 w-64 transition-all placeholder:text-cyan-200/30 text-cyan-50 shadow-inner" />
+                            <!-- Search Component -->
+                            <div class="relative hidden lg:block group">
+                                <div class="relative">
+                                    <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors" :class="searchQuery ? 'text-cyan-400' : 'text-white/30'" />
+                                    <input 
+                                        v-model="searchQuery"
+                                        @input="performSearch"
+                                        @focus="showSearchResults = searchQuery.length >= 2"
+                                        type="text" 
+                                        placeholder="Buscar en la bóveda..." 
+                                        class="bg-cyan-950/20 border-cyan-500/20 rounded-full py-2.5 pl-10 pr-10 text-sm focus:ring-cyan-500/50 focus:border-cyan-500/50 w-64 lg:w-80 transition-all placeholder:text-cyan-200/30 text-cyan-50 shadow-inner" 
+                                    />
+                                    <button v-if="searchQuery" @click="clearSearch" class="absolute right-3 top-1/2 -translate-y-1/2 text-white/20 hover:text-white transition-colors">
+                                        <X class="w-4 h-4" />
+                                    </button>
+                                </div>
+
+                                <!-- Search Results Dropdown -->
+                                <div v-if="showSearchResults" v-click-outside="() => showSearchResults = false" class="absolute top-full mt-3 right-0 w-[400px] bg-[#0d1117] border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden backdrop-blur-3xl z-[60] animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <div class="p-4 overflow-y-auto max-h-[70vh]">
+                                        <!-- Categories Section -->
+                                        <div v-if="searchResults.categories.length > 0" class="mb-4">
+                                            <h4 class="text-[10px] font-black text-cyan-500 uppercase tracking-widest px-2 mb-2">Canales / Secciones</h4>
+                                            <div class="grid gap-1">
+                                                <Link 
+                                                    v-for="cat in searchResults.categories" 
+                                                    :key="cat.id" 
+                                                    :href="route('categories.show', cat.id)"
+                                                    @click="showSearchResults = false"
+                                                    class="flex items-center justify-between p-3 rounded-xl hover:bg-white/5 group/res transition-colors"
+                                                >
+                                                    <div class="flex items-center gap-3">
+                                                        <div class="p-2 bg-cyan-500/10 rounded-lg group-hover/res:bg-cyan-500/20">
+                                                            <Folder class="w-4 h-4 text-cyan-400" />
+                                                        </div>
+                                                        <span class="text-sm font-bold text-white/80 group-hover/res:text-white">{{ cat.name }}</span>
+                                                    </div>
+                                                    <ChevronRight class="w-4 h-4 text-white/20 group-hover/res:text-white group-hover/res:translate-x-1 transition-all" />
+                                                </Link>
+                                            </div>
+                                        </div>
+
+                                        <!-- Files Section -->
+                                        <div v-if="searchResults.files.length > 0">
+                                            <h4 class="text-[10px] font-black text-pink-500 uppercase tracking-widest px-2 mb-2">Archivos / Medios</h4>
+                                            <div class="grid gap-1">
+                                                <Link 
+                                                    v-for="file in searchResults.files" 
+                                                    :key="file.id" 
+                                                    :href="route('categories.show', file.category_id)"
+                                                    @click="showSearchResults = false"
+                                                    class="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 group/res transition-colors"
+                                                >
+                                                    <div class="w-12 h-10 bg-black rounded-lg overflow-hidden flex-shrink-0 border border-white/10 relative">
+                                                        <img v-if="file.thumbnail_path" :src="'/storage/' + file.thumbnail_path" class="w-full h-full object-cover opacity-60" />
+                                                        <div v-else class="w-full h-full flex items-center justify-center bg-gray-800">
+                                                            <FileIcon class="w-4 h-4 text-white/20" />
+                                                        </div>
+                                                    </div>
+                                                    <div class="min-w-0">
+                                                        <p class="text-sm font-bold text-white/80 group-hover/res:text-white truncate">{{ file.title }}</p>
+                                                        <p class="text-[10px] font-bold text-white/20 uppercase">{{ file.category.name }}</p>
+                                                    </div>
+                                                </Link>
+                                            </div>
+                                        </div>
+
+                                        <!-- Empty State -->
+                                        <div v-if="searchResults.categories.length === 0 && searchResults.files.length === 0" class="py-12 text-center">
+                                            <Search class="w-10 h-10 text-white/10 mx-auto mb-3" />
+                                            <p class="text-sm font-bold text-white/30 uppercase tracking-widest">No se encontraron resultados</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="p-3 bg-white/5 border-t border-white/5 flex justify-between items-center">
+                                        <span class="text-[9px] font-bold text-white/20 uppercase tracking-tighter">Enter para ver todo</span>
+                                        <span class="text-[9px] font-bold text-white/20 uppercase tracking-tighter">{{ searchResults.categories.length + searchResults.files.length }} coincidencias</span>
+                                    </div>
+                                </div>
                             </div>
 
                             <button class="text-white/40 hover:text-white transition-colors relative">

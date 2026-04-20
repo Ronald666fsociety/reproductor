@@ -14,9 +14,10 @@ class VideoController extends Controller
     public function upload(Request $request)
     {
         $request->validate([
-            'video' => 'required|max:2097152', // 2GB limit, todo tipo de archivos permitidos
+            'video' => 'required|max:2097152',
             'category_id' => 'required|exists:categories,id',
             'title' => 'required|string|max:255',
+            'tags' => 'nullable|string', // Comma separated tags
         ]);
 
         $category = Category::findOrFail($request->category_id);
@@ -51,14 +52,28 @@ class VideoController extends Controller
             }
 
             // Guardar en la base de datos
-            Video::create([
+            $video = Video::create([
                 'category_id' => $request->category_id,
                 'title' => $request->title,
+                'description' => $request->description ?? null,
                 'path' => $path,
                 'thumbnail_path' => $finalThumbnailPath,
                 'file_type' => $mimeType,
-                'order' => Video::where('category_id', $request->category_id)->count() + 1,
+                'file_size' => $file->getSize(),
+                'order' => Video::where('category_id', $request->category_id)->withoutGlobalScopes()->count() + 1,
             ]);
+
+            // Manejar etiquetas
+            if ($request->filled('tags')) {
+                $tagNames = explode(',', $request->tags);
+                foreach ($tagNames as $name) {
+                    $name = trim($name);
+                    if ($name) {
+                        $tag = \App\Models\Tag::firstOrCreate(['name' => $name]);
+                        $video->tags()->attach($tag->id);
+                    }
+                }
+            }
 
             return back()->with('success', 'Archivo subido y procesado con éxito.');
         }
@@ -86,16 +101,24 @@ class VideoController extends Controller
 
     public function destroy(Video $video)
     {
-        if ($video->category->user_id !== auth()->id()) {
+        if ($video->category->user_id !== auth()->id() && !auth()->user()->is_admin) {
             abort(403, 'Acceso denegado.');
         }
 
-        Storage::disk('public')->delete($video->path);
-        if ($video->thumbnail_path) {
-            Storage::disk('public')->delete($video->thumbnail_path);
-        }
+        // Now we just soft delete. Files are kept until purged from Trash.
         $video->delete();
         
-        return back()->with('success', 'Archivo eliminado.');
+        return back()->with('success', 'Archivo movido a la papelera.');
+    }
+
+    public function toggleFavorite(Video $video)
+    {
+        if ($video->category->user_id !== auth()->id() && !auth()->user()->is_admin) {
+            abort(403, 'Acceso denegado.');
+        }
+
+        $video->update(['is_favorite' => !$video->is_favorite]);
+
+        return back();
     }
 }

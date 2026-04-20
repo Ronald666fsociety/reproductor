@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Category extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = ['name', 'slug', 'password', 'order', 'user_id'];
 
     public function user()
@@ -16,5 +19,10 @@ class Category extends Model
     public function videos()
     {
         return $this->hasMany(Video::class)->orderBy('order');
+    }
+
+    public function activityLogs()
+    {
+        return $this->morphMany(ActivityLog::class, 'subject');
     }
 }

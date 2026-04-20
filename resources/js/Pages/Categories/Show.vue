@@ -2,16 +2,22 @@
 import { ref, computed } from 'vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import axios from 'axios';
 import VideoPlayer from '@/Components/VideoPlayer.vue';
-import { Play, Film, Upload, Trash2, ArrowLeft, Grid, List as ListIcon, Image as ImageIcon, File as FileIcon, Download, Music, PlayCircle } from 'lucide-vue-next';
+import { Play, Film, Upload, Trash2, ArrowLeft, Grid, List as ListIcon, Image as ImageIcon, File as FileIcon, Download, Music, PlayCircle, Share2, Clipboard, Link as LinkIcon, CheckCircle, Info, Star, Tag as TagIcon, Filter } from 'lucide-vue-next';
 
 interface Video {
     id: number;
     title: string;
+    description: string | null;
     path: string;
     thumbnail_path: string | null;
     file_type: string | null;
+    file_size: number | null;
+    is_favorite: boolean;
+    tags: Array<{ name: string, id: number }>;
     order: number;
+    created_at: string;
 }
 
 interface Category {
@@ -27,36 +33,135 @@ const props = defineProps<{
 const user = (usePage().props.auth as any).user;
 const selectedVideo = ref<Video | null>(props.category.videos.length > 0 ? props.category.videos[0] : null);
 const showUploadModal = ref(false);
-const isUploaded = ref(false);
 const viewMode = ref<'grid' | 'list'>('grid');
+const showFavoritesOnly = ref(false);
+const fileInput = ref<HTMLInputElement | null>(null);
 
-const uploadForm = useForm({
-    title: '',
-    category_id: props.category.id,
-    video: null as File | null,
+const uploadQueue = ref<any[]>([]);
+const isUploading = ref(false);
+const showShareModal = ref(false);
+const generatedLink = ref('');
+const isCopying = ref(false);
+
+const filteredVideos = computed(() => {
+    if (showFavoritesOnly.value) {
+        return props.category.videos.filter(v => v.is_favorite);
+    }
+    return props.category.videos;
 });
 
-const handleFileUpload = (e: any) => {
-    uploadForm.video = e.target.files[0];
-    if (!uploadForm.title && uploadForm.video) {
-        uploadForm.title = uploadForm.video.name.replace(/\.[^/.]+$/, "");
+const formatSize = (bytes: number | null) => {
+    if (!bytes) return 'N/A';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('es-ES', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric'
+    });
+};
+
+const handleFiles = (files: FileList | null) => {
+    if (!files) return;
+    for (let i = 0; i < files.length; i++) {
+        uploadQueue.value.push({
+            id: Math.random().toString(36).substring(7),
+            file: files[i],
+            name: files[i].name.replace(/\.[^/.]+$/, ""),
+            description: '',
+            tags: '',
+            progress: 0,
+            status: 'pending' // pending, uploading, success, error
+        });
     }
 };
 
-const submitUpload = () => {
-    uploadForm.post(route('video.upload'), {
-        forceFormData: true,
-        preserveScroll: true,
-        preserveState: false,
-        onSuccess: () => {
-            isUploaded.value = true;
-            setTimeout(() => {
-                showUploadModal.value = false;
-                isUploaded.value = false;
-                uploadForm.reset();
-            }, 3000);
-        },
-    });
+const shareVideo = async (video: Video) => {
+    try {
+        const response = await axios.post(route('video.share', video.id));
+        generatedLink.value = response.data.link;
+        showShareModal.value = true;
+    } catch (error) {
+        alert('Error al generar enlace de compartir.');
+    }
+};
+
+const copyLink = () => {
+    navigator.clipboard.writeText(generatedLink.value);
+    isCopying.value = true;
+    setTimeout(() => isCopying.value = false, 2000);
+};
+
+const downloadAll = () => {
+    window.location.href = route('categories.download', props.category.id);
+};
+
+const handleDrop = (e: DragEvent) => {
+    handleFiles(e.dataTransfer?.files || null);
+};
+
+const handleFileInput = (e: any) => {
+    handleFiles(e.target.files);
+    e.target.value = ''; // Reset input
+};
+
+const removeFile = (id: string) => {
+    uploadQueue.value = uploadQueue.value.filter(f => f.id !== id);
+};
+
+const submitUpload = async () => {
+    if (isUploading.value || uploadQueue.value.length === 0) return;
+    isUploading.value = true;
+
+    for (let i = 0; i < uploadQueue.value.length; i++) {
+        const item = uploadQueue.value[i];
+        if (item.status === 'success') continue;
+
+        item.status = 'uploading';
+        
+        await new Promise<void>((resolve) => {
+            const form = useForm({
+                category_id: props.category.id,
+                title: item.name,
+                description: item.description,
+                tags: item.tags,
+                video: item.file
+            });
+
+            form.post(route('video.upload'), {
+                forceFormData: true,
+                preserveScroll: true,
+                preserveState: true,
+                onProgress: (e: any) => {
+                    item.progress = Math.round((e.loaded / e.total) * 100);
+                },
+                onSuccess: () => {
+                    item.status = 'success';
+                    item.progress = 100;
+                    resolve();
+                },
+                onError: () => {
+                    item.status = 'error';
+                    resolve();
+                }
+            });
+        });
+    }
+
+    isUploading.value = false;
+    
+    // Check if all are success to close modal
+    if (uploadQueue.value.every(i => i.status === 'success')) {
+        setTimeout(() => {
+            showUploadModal.value = false;
+            uploadQueue.value = [];
+        }, 1500);
+    }
 };
 
 const deleteVideo = (id: number) => {
@@ -66,6 +171,15 @@ const deleteVideo = (id: number) => {
             preserveState: false,
         });
     }
+};
+
+const toggleFavorite = (video: Video) => {
+    router.post(route('video.favorite', video.id), {}, {
+        preserveScroll: true,
+        onSuccess: () => {
+            video.is_favorite = !video.is_favorite;
+        }
+    });
 };
 
 const selectVideo = (video: Video) => {
@@ -107,11 +221,18 @@ const stopPreview = (e: MouseEvent) => {
                 
                 <div class="flex gap-2">
                     <button 
+                        @click="downloadAll"
+                        class="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg transition-all"
+                    >
+                        <Download class="w-4 h-4" />
+                        Pack Completo (ZIP)
+                    </button>
+                    <button 
                         @click="showUploadModal = true"
                         class="flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg transition-all"
                     >
                         <Upload class="w-4 h-4" />
-                        Subir Archivo
+                        Subir Archivos
                     </button>
                 </div>
             </div>
@@ -139,6 +260,27 @@ const stopPreview = (e: MouseEvent) => {
                                 <img :src="'/storage/' + selectedVideo.path" class="w-full h-full object-contain max-h-[70vh]" />
                             </div>
 
+                            <!-- Visor de Audio -->
+                            <div v-else-if="selectedVideo.file_type && selectedVideo.file_type.startsWith('audio/')" class="w-full bg-gradient-to-br from-indigo-900 to-black rounded-3xl overflow-hidden shadow-2xl border border-white/10 flex flex-col items-center justify-center min-h-[400px] p-12 text-center">
+                                <div class="w-32 h-32 bg-indigo-500/20 rounded-full flex items-center justify-center mb-8 relative">
+                                    <div class="absolute inset-0 border-4 border-indigo-500 rounded-full animate-[spin_4s_linear_infinite] border-t-transparent"></div>
+                                    <Music class="w-16 h-16 text-indigo-400" />
+                                </div>
+                                <h3 class="text-3xl font-black text-white mb-2">{{ selectedVideo.title }}</h3>
+                                <p class="text-white/40 mb-8 font-mono text-sm">Reproduciendo Audio</p>
+                                <audio controls :src="route('video.stream', selectedVideo.id)" class="w-full max-w-lg mt-4 outline-none"></audio>
+                            </div>
+
+                            <!-- Visor de PDF -->
+                            <div v-else-if="selectedVideo.file_type && selectedVideo.file_type === 'application/pdf'" class="w-full h-[60vh] max-h-[600px] min-h-[400px] bg-gray-900 rounded-3xl overflow-hidden shadow-2xl border border-white/10 relative">
+                                <div class="absolute top-4 right-4 z-10">
+                                    <a :href="route('video.stream', selectedVideo.id)" download target="_blank" class="p-3 bg-pink-600/80 hover:bg-pink-600 text-white rounded-xl backdrop-blur-md transition flex gap-2 items-center text-sm font-bold shadow-lg">
+                                        <Download class="w-4 h-4"/> Descargar
+                                    </a>
+                                </div>
+                                <iframe :src="route('video.stream', selectedVideo.id) + '#toolbar=0'" class="w-full h-full border-0"></iframe>
+                            </div>
+
                             <!-- Visor de Documentos Genéricos -->
                             <div v-else class="w-full bg-gradient-to-br from-gray-900 to-black rounded-3xl overflow-hidden shadow-2xl border border-white/10 flex flex-col items-center justify-center min-h-[400px] p-12 text-center">
                                 <div class="w-24 h-24 bg-pink-500/20 rounded-full flex items-center justify-center mb-6">
@@ -162,6 +304,13 @@ const stopPreview = (e: MouseEvent) => {
                                     <h3 class="text-3xl font-black text-white tracking-tighter leading-none">{{ selectedVideo.title }}</h3>
                                 </div>
                                 <div class="flex gap-3">
+                                    <button @click="toggleFavorite(selectedVideo)" class="p-4 bg-white/5 rounded-2xl transition-all duration-300 shadow-lg active:scale-95 group/fav" :title="selectedVideo.is_favorite ? 'Quitar de favoritos' : 'Marcar como favorito'">
+                                        <Star class="w-6 h-6 transition-all" :class="selectedVideo.is_favorite ? 'fill-yellow-400 text-yellow-400 scale-110' : 'text-white/40 group-hover/fav:text-yellow-400'" />
+                                    </button>
+                                    <button @click="shareVideo(selectedVideo)" class="p-4 bg-white/5 text-white/40 hover:text-white hover:bg-white/10 rounded-2xl transition-all duration-300 shadow-lg active:scale-95 flex items-center gap-2">
+                                        <Share2 class="w-6 h-6" />
+                                        <span class="text-xs font-black uppercase tracking-widest hidden sm:inline">Compartir</span>
+                                    </button>
                                     <button @click="deleteVideo(selectedVideo.id)" class="p-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-2xl transition-all duration-300 shadow-lg hover:shadow-red-500/20 active:scale-95">
                                         <Trash2 class="w-6 h-6" />
                                     </button>
@@ -178,11 +327,49 @@ const stopPreview = (e: MouseEvent) => {
                         </div>
 
                         <!-- Description or Info -->
-                        <div class="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8">
-                            <h4 class="text-white font-bold mb-4">Detalles de la Serie</h4>
-                            <p class="text-white/60 leading-relaxed text-sm">
-                                Estás en la sección exclusiva de {{ category.name }}. Aquí encontrarás todo el material enumerado y previsualizado para una mejor experiencia de visualización privada.
-                            </p>
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <div class="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8 group">
+                                <div class="flex items-center gap-2 mb-4 text-cyan-400">
+                                    <Info class="w-4 h-4" />
+                                    <h4 class="text-xs font-black uppercase tracking-widest">Información Técnica</h4>
+                                </div>
+                                <div class="space-y-4">
+                                    <div v-if="selectedVideo?.description" class="p-4 bg-white/5 rounded-xl border border-white/5">
+                                        <p class="text-white/80 text-sm leading-relaxed italic">"{{ selectedVideo.description }}"</p>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <p class="text-[10px] font-black text-white/20 uppercase mb-1">Tamaño</p>
+                                            <p class="text-sm font-black text-white">{{ formatSize(selectedVideo?.file_size || null) }}</p>
+                                        </div>
+                                        <div>
+                                            <p class="text-[10px] font-black text-white/20 uppercase mb-1">Tipo MIME</p>
+                                            <p class="text-sm font-black text-white truncate">{{ selectedVideo?.file_type || 'Desconocido' }}</p>
+                                        </div>
+                                    </div>
+                                    <!-- Tags Display -->
+                                    <div v-if="selectedVideo?.tags && selectedVideo.tags.length > 0" class="flex flex-wrap gap-2 pt-2">
+                                        <div v-for="tag in selectedVideo.tags" :key="tag.id" class="px-2 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-lg flex items-center gap-1">
+                                            <TagIcon class="w-2 h-2 text-cyan-400" />
+                                            <span class="text-[9px] font-bold text-cyan-400 uppercase tracking-tighter">{{ tag.name }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8">
+                                <div class="flex items-center gap-2 mb-4 text-pink-400">
+                                    <CheckCircle class="w-4 h-4" />
+                                    <h4 class="text-xs font-black uppercase tracking-widest">Verificación</h4>
+                                </div>
+                                <div class="space-y-2">
+                                    <p class="text-white/40 text-xs font-medium">Subido el:</p>
+                                    <p class="text-white font-black">{{ selectedVideo ? formatDate(selectedVideo.created_at) : 'N/A' }}</p>
+                                    <div class="mt-4 pt-4 border-t border-white/5 flex items-center gap-2">
+                                        <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                                        <span class="text-[10px] font-black text-white/20 uppercase">Listo para streaming local</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -192,9 +379,11 @@ const stopPreview = (e: MouseEvent) => {
                             <div class="flex justify-between items-center mb-6">
                                 <h3 class="text-lg font-bold text-white flex items-center gap-2">
                                     <PlayCircle class="w-5 h-5 text-pink-500" />
-                                    Galería ({{ category.videos.length }})
+                                    Galería ({{ filteredVideos.length }})
                                 </h3>
                                 <div class="flex gap-1 bg-white/5 p-1 rounded-lg">
+                                    <button @click="showFavoritesOnly = !showFavoritesOnly" :class="showFavoritesOnly ? 'bg-yellow-400/20 text-yellow-400 border border-yellow-400/20' : 'text-white/40'" class="p-1 px-2 rounded-md transition-colors" title="Filtrar Favoritos"><Filter class="w-4 h-4" /></button>
+                                    <div class="w-px bg-white/10 mx-0.5"></div>
                                     <button @click="viewMode = 'grid'" :class="viewMode === 'grid' ? 'bg-pink-600 text-white' : 'text-white/40'" class="p-1 px-2 rounded-md transition-colors"><Grid class="w-4 h-4" /></button>
                                     <button @click="viewMode = 'list'" :class="viewMode === 'list' ? 'bg-pink-600 text-white' : 'text-white/40'" class="p-1 px-2 rounded-md transition-colors"><ListIcon class="w-4 h-4" /></button>
                                 </div>
@@ -202,7 +391,7 @@ const stopPreview = (e: MouseEvent) => {
 
                             <div class="overflow-y-auto flex-1 custom-scrollbar space-y-3 pr-2">
                                 <div 
-                                    v-for="(video, index) in category.videos" 
+                                    v-for="(video, index) in filteredVideos" 
                                     :key="video.id"
                                     @click="selectVideo(video)"
                                     class="group relative flex gap-4 p-4 rounded-3xl border cursor-pointer transition-all duration-500 overflow-hidden"
@@ -234,6 +423,9 @@ const stopPreview = (e: MouseEvent) => {
                                         <div class="absolute bottom-2 right-2 px-1.5 py-0.5 bg-pink-600/80 backdrop-blur-md text-[8px] text-white font-black rounded-md z-30 pointer-events-none">
                                             #{{ index + 1 }}
                                         </div>
+                                        <div v-if="video.is_favorite" class="absolute top-2 left-2 z-30">
+                                            <Star class="w-3 h-3 text-yellow-400 fill-yellow-400 drop-shadow-md" />
+                                        </div>
                                     </div>
                                     <div class="flex-1 min-w-0 py-2">
                                         <p class="text-sm font-black text-white truncate group-hover:text-pink-400 transition-colors tracking-tight">{{ video.title }}</p>
@@ -257,55 +449,99 @@ const stopPreview = (e: MouseEvent) => {
             </div>
         </div>
 
-        <!-- Upload Modal (Admin Only) -->
         <div v-if="showUploadModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div class="bg-gray-900 border border-white/20 w-full max-w-md rounded-3xl p-8 shadow-2xl">
-                <h3 class="text-2xl font-bold text-white mb-6">Subir Nuevo Archivo</h3>
-                <form @submit.prevent="submitUpload" class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-white/60 mb-2">Título del Medio</label>
-                        <input v-model="uploadForm.title" type="text" class="w-full bg-white/5 border-white/10 rounded-xl text-white focus:ring-pink-500" required />
+            <div class="bg-gray-900 border border-white/20 w-full max-w-lg rounded-3xl p-8 shadow-2xl h-[80vh] flex flex-col">
+                <h3 class="text-2xl font-bold text-white mb-6">Subir Archivos</h3>
+                
+                <!-- Drag and Drop Area -->
+                <div 
+                    class="border-2 border-dashed border-white/20 rounded-2xl p-8 mb-6 text-center hover:bg-white/5 transition-colors cursor-pointer group flex-shrink-0"
+                    @dragover.prevent
+                    @drop.prevent="handleDrop"
+                    @click="fileInput?.click()"
+                >
+                    <input type="file" multiple ref="fileInput" @change="handleFileInput" class="hidden" />
+                    <Upload class="w-12 h-12 text-pink-500/50 mx-auto mb-4 group-hover:bg-pink-500/20 group-hover:text-pink-500 rounded-full p-2 transition-all" />
+                    <p class="text-white font-bold mb-1">Haz clic o arrastra archivos aquí</p>
+                    <p class="text-white/40 text-sm">Soporta múltiples videos, imágenes, pdfs, audios...</p>
+                </div>
+
+                <!-- Lista de Archivos -->
+                <div class="flex-1 overflow-y-auto custom-scrollbar pr-2 mb-6 space-y-3">
+                    <div v-if="uploadQueue.length === 0" class="flex flex-col items-center justify-center h-full text-white/20">
+                        <FileIcon class="w-16 h-16 mb-4 opacity-20" />
+                        <p>No hay archivos seleccionados.</p>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-white/60 mb-2">Seleccionar Documento (Video, Foto, ZIP)</label>
-                        <input type="file" @change="handleFileUpload" class="w-full text-white text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20" />
+
+                    <div v-for="(item, idx) in uploadQueue" :key="item.id" class="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col gap-2 relative">
+                        <div class="flex justify-between items-center gap-4">
+                            <div class="flex-1 min-w-0">
+                                <input v-model="item.name" type="text" class="w-full bg-transparent border-0 border-b border-white/10 text-white text-sm font-bold focus:ring-0 focus:border-pink-500 px-0 py-1" placeholder="Nombre del archivo" :disabled="item.status === 'uploading' || item.status === 'success'" />
+                            </div>
+                            <button v-if="item.status === 'pending'" @click="removeFile(item.id)" class="text-white/40 hover:text-red-400">
+                                <Trash2 class="w-4 h-4" />
+                            </button>
+                            <span v-else-if="item.status === 'success'" class="text-green-400 text-xs font-bold uppercase">LISTO</span>
+                        </div>
                         
-                        <!-- Progress Bar (The requested "como se esta cargando") -->
-                        <div v-if="uploadForm.progress" class="mt-4">
-                            <div class="flex justify-between text-[10px] text-pink-400 font-bold mb-1 uppercase tracking-wider">
-                                <span>Subiendo Contenido...</span>
-                                <span>{{ uploadForm.progress.percentage }}%</span>
-                            </div>
-                            <div class="w-full bg-white/5 rounded-full h-2 overflow-hidden border border-white/10">
-                                <div 
-                                    class="bg-gradient-to-r from-pink-500 to-purple-600 h-full transition-all duration-300 shadow-[0_0_10px_rgba(236,72,153,0.5)]" 
-                                    :style="{ width: uploadForm.progress.percentage + '%' }"
-                                ></div>
+                        <div v-if="item.status === 'pending'">
+                            <textarea v-model="item.description" rows="1" class="w-full bg-white/5 border border-white/10 rounded-lg text-[10px] text-white/60 focus:ring-pink-500/30 font-medium py-2 px-3 mt-1 resize-none" placeholder="Añadir descripción opcional..."></textarea>
+                            <div class="relative mt-1">
+                                <TagIcon class="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-white/20" />
+                                <input v-model="item.tags" type="text" class="w-full bg-white/5 border border-white/10 rounded-lg text-[10px] text-white/40 focus:ring-pink-500/30 pl-8 pr-3 py-1.5" placeholder="Etiquetas (separadas por coma)..." />
                             </div>
                         </div>
-
-                        <!-- Processing State (FFmpeg) -->
-                        <div v-if="uploadForm.processing && !uploadForm.progress" class="mt-4 flex items-center gap-3 text-yellow-400 animate-pulse">
-                            <div class="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin"></div>
-                            <span class="text-xs font-bold uppercase tracking-widest">Procesando Miniatura con FFmpeg...</span>
-                        </div>
-
-                        <!-- Success Feedback (The requested "VIDEO CARGADO") -->
-                        <div v-if="isUploaded" class="mt-6 p-4 bg-green-500/10 border border-green-500/50 rounded-2xl text-green-400 text-center font-black text-xl tracking-tighter animate-in zoom-in duration-300">
-                             ✨ ¡ARCHIVO CARGADO!
+                        
+                        <div v-if="item.status !== 'pending'" class="mt-2 text-[10px] uppercase font-bold tracking-wider" :class="{ 'text-pink-400': item.status === 'uploading', 'text-green-400': item.status === 'success', 'text-red-400': item.status === 'error' }">
+                            <div class="flex justify-between mb-1">
+                                <span>{{ item.status === 'uploading' ? 'Subiendo...' : (item.status === 'success' ? 'Completado' : 'Error') }}</span>
+                                <span v-if="item.status === 'uploading'">{{ item.progress }}%</span>
+                            </div>
+                            <div class="w-full bg-black/50 rounded-full h-1.5 overflow-hidden">
+                                <div class="bg-gradient-to-r h-full transition-all duration-300" 
+                                     :class="item.status === 'success' ? 'from-green-500 to-green-400' : (item.status === 'error' ? 'from-red-500 to-red-400' : 'from-pink-500 to-purple-600')"
+                                     :style="{ width: item.progress + '%' }"></div>
+                            </div>
                         </div>
                     </div>
-                    <div v-if="!isUploaded" class="flex gap-4 pt-4">
-                        <button type="button" @click="showUploadModal = false" class="flex-1 py-3 text-white/60 font-bold hover:text-white transition-colors">Cancelar</button>
-                        <button 
-                            type="submit" 
-                            :disabled="uploadForm.processing || !uploadForm.video" 
-                            class="flex-1 py-3 bg-gradient-to-r from-pink-600 to-purple-700 disabled:from-gray-800 disabled:to-gray-900 disabled:text-white/20 text-white font-bold rounded-xl shadow-lg shadow-pink-900/40 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                        >
-                            {{ uploadForm.processing ? 'Espere...' : 'Comenzar Subida' }}
+                </div>
+
+                <!-- Botonera -->
+                <div class="flex gap-4 pt-4 border-t border-white/10 flex-shrink-0">
+                    <button type="button" @click="showUploadModal = false; uploadQueue = []" class="flex-1 py-3 text-white/60 font-bold hover:text-white transition-colors" :disabled="isUploading">Cerrar</button>
+                    <button 
+                        @click="submitUpload"
+                        :disabled="isUploading || uploadQueue.length === 0 || uploadQueue.every(i => i.status === 'success')" 
+                        class="flex-1 py-3 bg-gradient-to-r from-pink-600 to-purple-700 disabled:from-gray-800 disabled:to-gray-900 disabled:text-white/20 text-white font-bold rounded-xl shadow-lg transition-all"
+                    >
+                        {{ isUploading ? 'Subiendo Archivos...' : 'Comenzar Subida' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Share Modal -->
+        <div v-if="showShareModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+            <div class="bg-gray-900 border border-white/20 w-full max-w-md rounded-[2.5rem] p-10 shadow-3xl animate-in zoom-in duration-300">
+                <div class="w-16 h-16 bg-pink-500/10 rounded-2xl flex items-center justify-center mb-6 text-pink-500">
+                    <Share2 class="w-8 h-8" />
+                </div>
+                <h3 class="text-3xl font-black text-white mb-2 tracking-tighter">Enlace de Acceso</h3>
+                <p class="text-white/40 mb-8 text-sm font-bold uppercase tracking-widest leading-relaxed">Cualquier persona con este link podrá ver el archivo durante 24 horas.</p>
+                
+                <div class="space-y-6">
+                    <div class="relative">
+                        <div class="bg-white/5 border border-white/10 rounded-2xl p-4 pr-12 text-sm text-cyan-400 font-mono break-all line-clamp-2">
+                            {{ generatedLink }}
+                        </div>
+                        <button @click="copyLink" class="absolute right-3 top-1/2 -translate-y-1/2 p-2 hover:bg-white/10 rounded-xl transition-all">
+                            <Clipboard v-if="!isCopying" class="w-5 h-5 text-white/40" />
+                            <CheckCircle v-else class="w-5 h-5 text-green-500" />
                         </button>
                     </div>
-                </form>
+                    
+                    <button @click="showShareModal = false" class="w-full py-4 bg-white/10 hover:bg-white/20 text-white font-black rounded-2xl transition-all uppercase tracking-widest text-xs">Cerrar</button>
+                </div>
             </div>
         </div>
 
