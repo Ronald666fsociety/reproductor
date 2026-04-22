@@ -3,8 +3,8 @@ import { ref, computed } from 'vue';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import axios from 'axios';
-import VideoPlayer from '@/Components/VideoPlayer.vue';
-import { Play, Film, Upload, Trash2, ArrowLeft, Grid, List as ListIcon, Image as ImageIcon, File as FileIcon, Download, Music, PlayCircle, Share2, Clipboard, Link as LinkIcon, CheckCircle, Info, Star, Tag as TagIcon, Filter } from 'lucide-vue-next';
+import UniversalFileViewer from '@/Components/UniversalFileViewer.vue';
+import { Play, Film, Upload, Trash2, ArrowLeft, Grid, List as ListIcon, Image as ImageIcon, File as FileIcon, Download, Music, PlayCircle, Share2, Clipboard, Link as LinkIcon, CheckCircle, Info, Star, Tag as TagIcon, Filter, Folder, ChevronRight, Home } from 'lucide-vue-next';
 
 interface Video {
     id: number;
@@ -23,11 +23,14 @@ interface Video {
 interface Category {
     id: number;
     name: string;
+    slug: string;
     videos: Video[];
+    children: Category[];
 }
 
 const props = defineProps<{
     category: Category;
+    breadcrumbs: Array<{ id: number, name: string, slug: string }>;
 }>();
 
 const user = (usePage().props.auth as any).user;
@@ -40,6 +43,8 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const uploadQueue = ref<any[]>([]);
 const isUploading = ref(false);
 const showShareModal = ref(false);
+const showNewFolderModal = ref(false);
+const newFolderName = ref('');
 const generatedLink = ref('');
 const isCopying = ref(false);
 
@@ -164,6 +169,19 @@ const submitUpload = async () => {
     }
 };
 
+const createFolder = () => {
+    if (!newFolderName.value) return;
+    
+    useForm({
+        name: newFolderName.value
+    }).post(route('categories.store-nested', props.category.id), {
+        onSuccess: () => {
+            showNewFolderModal.value = false;
+            newFolderName.value = '';
+        }
+    });
+};
+
 const deleteVideo = (id: number) => {
     if (confirm('¿Eliminar este video permanentemente?')) {
         useForm({}).delete(route('video.destroy', id), {
@@ -211,30 +229,60 @@ const stopPreview = (e: MouseEvent) => {
 
     <AuthenticatedLayout>
         <template #header>
-            <div class="flex justify-between items-center">
-                <div class="flex items-center gap-4">
-                    <Link :href="route('categories.index')" class="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
-                        <ArrowLeft class="w-5 h-5 text-white" />
-                    </Link>
-                    <h2 class="text-2xl font-bold text-white">{{ category.name }}</h2>
+            <div class="flex flex-col gap-4">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-4">
+                        <Link :href="route('categories.index')" class="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors">
+                            <ArrowLeft class="w-5 h-5 text-white" />
+                        </Link>
+                        <h2 class="text-2xl font-bold text-white tracking-widest uppercase">{{ category.name }}</h2>
+                    </div>
+                    
+                    <div class="flex gap-2">
+                        <button 
+                            @click="downloadAll"
+                            class="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg transition-all uppercase tracking-widest"
+                        >
+                            <Download class="w-4 h-4" />
+                            Pack ZIP
+                        </button>
+                        <button 
+                            @click="showNewFolderModal = true"
+                            class="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg transition-all uppercase tracking-widest border border-white/5"
+                        >
+                            <Folder class="w-4 h-4" />
+                            Nueva Carpeta
+                        </button>
+                        <button 
+                            @click="showUploadModal = true"
+                            class="flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg transition-all uppercase tracking-widest"
+                        >
+                            <Upload class="w-4 h-4" />
+                            Subir
+                        </button>
+                    </div>
                 </div>
-                
-                <div class="flex gap-2">
-                    <button 
-                        @click="downloadAll"
-                        class="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg transition-all"
-                    >
-                        <Download class="w-4 h-4" />
-                        Pack Completo (ZIP)
-                    </button>
-                    <button 
-                        @click="showUploadModal = true"
-                        class="flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg transition-all"
-                    >
-                        <Upload class="w-4 h-4" />
-                        Subir Archivos
-                    </button>
-                </div>
+
+                <!-- Breadcrumbs -->
+                <nav class="flex px-4 py-2 bg-white/5 rounded-xl border border-white/5 overflow-hidden">
+                    <ol class="flex items-center space-x-2 text-[10px] font-black uppercase tracking-widest text-white/40">
+                        <li>
+                            <Link :href="route('categories.index')" class="hover:text-pink-500 transition-colors flex items-center gap-1">
+                                <Home class="w-3 h-3" />
+                                Raíz
+                            </Link>
+                        </li>
+                        <li v-for="(crumb, idx) in breadcrumbs" :key="crumb.id" class="flex items-center space-x-2">
+                            <ChevronRight class="w-3 h-3 opacity-30" />
+                            <Link 
+                                :href="route('categories.show', crumb.id)" 
+                                :class="idx === breadcrumbs.length - 1 ? 'text-pink-500' : 'hover:text-white transition-colors'"
+                            >
+                                {{ crumb.name }}
+                            </Link>
+                        </li>
+                    </ol>
+                </nav>
             </div>
         </template>
 
@@ -247,52 +295,14 @@ const stopPreview = (e: MouseEvent) => {
                     <div class="lg:col-span-2 space-y-6">
                         <div v-if="selectedVideo" class="glass-premium rounded-[3rem] overflow-hidden shadow-2xl p-6 border border-white/10 animate-in slide-in-from-bottom duration-700">
                             
-                            <!-- Reproductor de Video -->
-                            <VideoPlayer 
-                                v-if="selectedVideo.file_type && selectedVideo.file_type.startsWith('video/')"
+                            <!-- VISOR UNIVERSAL -->
+                            <UniversalFileViewer 
+                                v-if="selectedVideo"
                                 :key="selectedVideo.id"
-                                :src="route('video.stream', selectedVideo.id)"
-                                :title="selectedVideo.title"
+                                :file="selectedVideo"
+                                :stream-url="route('video.stream', selectedVideo.id)"
                             />
 
-                            <!-- Visor de Imágenes -->
-                            <div v-else-if="selectedVideo.file_type && selectedVideo.file_type.startsWith('image/')" class="w-full bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/10 flex items-center justify-center max-h-[70vh] min-h-[300px]">
-                                <img :src="'/storage/' + selectedVideo.path" class="w-full h-full object-contain max-h-[70vh]" />
-                            </div>
-
-                            <!-- Visor de Audio -->
-                            <div v-else-if="selectedVideo.file_type && selectedVideo.file_type.startsWith('audio/')" class="w-full bg-gradient-to-br from-indigo-900 to-black rounded-3xl overflow-hidden shadow-2xl border border-white/10 flex flex-col items-center justify-center min-h-[400px] p-12 text-center">
-                                <div class="w-32 h-32 bg-indigo-500/20 rounded-full flex items-center justify-center mb-8 relative">
-                                    <div class="absolute inset-0 border-4 border-indigo-500 rounded-full animate-[spin_4s_linear_infinite] border-t-transparent"></div>
-                                    <Music class="w-16 h-16 text-indigo-400" />
-                                </div>
-                                <h3 class="text-3xl font-black text-white mb-2">{{ selectedVideo.title }}</h3>
-                                <p class="text-white/40 mb-8 font-mono text-sm">Reproduciendo Audio</p>
-                                <audio controls :src="route('video.stream', selectedVideo.id)" class="w-full max-w-lg mt-4 outline-none"></audio>
-                            </div>
-
-                            <!-- Visor de PDF -->
-                            <div v-else-if="selectedVideo.file_type && selectedVideo.file_type === 'application/pdf'" class="w-full h-[60vh] max-h-[600px] min-h-[400px] bg-gray-900 rounded-3xl overflow-hidden shadow-2xl border border-white/10 relative">
-                                <div class="absolute top-4 right-4 z-10">
-                                    <a :href="route('video.stream', selectedVideo.id)" download target="_blank" class="p-3 bg-pink-600/80 hover:bg-pink-600 text-white rounded-xl backdrop-blur-md transition flex gap-2 items-center text-sm font-bold shadow-lg">
-                                        <Download class="w-4 h-4"/> Descargar
-                                    </a>
-                                </div>
-                                <iframe :src="route('video.stream', selectedVideo.id) + '#toolbar=0'" class="w-full h-full border-0"></iframe>
-                            </div>
-
-                            <!-- Visor de Documentos Genéricos -->
-                            <div v-else class="w-full bg-gradient-to-br from-gray-900 to-black rounded-3xl overflow-hidden shadow-2xl border border-white/10 flex flex-col items-center justify-center min-h-[400px] p-12 text-center">
-                                <div class="w-24 h-24 bg-pink-500/20 rounded-full flex items-center justify-center mb-6">
-                                    <FileIcon class="w-12 h-12 text-pink-500" />
-                                </div>
-                                <h3 class="text-3xl font-black text-white mb-2">{{ selectedVideo.title }}</h3>
-                                <p class="text-white/40 mb-8 font-mono text-sm">{{ selectedVideo.file_type || 'Documento Desconocido' }}</p>
-                                <a :href="'/storage/' + selectedVideo.path" download target="_blank" class="px-8 py-4 bg-gradient-to-r from-pink-600 to-purple-700 hover:from-pink-500 hover:to-purple-600 text-white font-black rounded-2xl shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-3">
-                                    <Download class="w-5 h-5" />
-                                    DESCARGAR ARCHIVO
-                                </a>
-                            </div>
 
                             <div class="mt-8 px-2 flex justify-between items-end">
                                 <div>
@@ -389,7 +399,29 @@ const stopPreview = (e: MouseEvent) => {
                                 </div>
                             </div>
 
-                            <div class="overflow-y-auto flex-1 custom-scrollbar space-y-3 pr-2">
+                            <div class="overflow-y-auto flex-1 custom-scrollbar pr-2 pb-8">
+                                <!-- Nested Folders -->
+                                <div v-if="category.children && category.children.length > 0" class="mb-6 space-y-2">
+                                    <h4 class="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-3 ml-2">Directorios Internos</h4>
+                                    <Link 
+                                        v-for="child in category.children" 
+                                        :key="child.id"
+                                        :href="route('categories.show', child.id)"
+                                        class="flex items-center gap-3 p-4 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/10 hover:border-pink-500/20 transition-all group/folder"
+                                    >
+                                        <div class="p-2 bg-pink-500/10 rounded-xl text-pink-500 group-hover/folder:bg-pink-500 group-hover/folder:text-white transition-all">
+                                            <Folder class="w-5 h-5" />
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-bold text-white truncate">{{ child.name }}</p>
+                                        </div>
+                                        <ChevronRight class="w-4 h-4 text-white/20 group-hover/folder:translate-x-1 transition-transform" />
+                                    </Link>
+                                </div>
+
+                                <div class="space-y-3">
+                                    <h4 class="text-[10px] font-black text-white/20 uppercase tracking-[0.2em] mb-3 ml-2">Archivos</h4>
+                                    <!-- Files list follows... -->
                                 <div 
                                     v-for="(video, index) in filteredVideos" 
                                     :key="video.id"
@@ -444,10 +476,10 @@ const stopPreview = (e: MouseEvent) => {
                             </div>
                         </div>
                     </div>
-
                 </div>
             </div>
         </div>
+    </div>
 
         <div v-if="showUploadModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
             <div class="bg-gray-900 border border-white/20 w-full max-w-lg rounded-3xl p-8 shadow-2xl h-[80vh] flex flex-col">
@@ -545,6 +577,27 @@ const stopPreview = (e: MouseEvent) => {
             </div>
         </div>
 
+        <!-- New Folder Modal -->
+        <div v-if="showNewFolderModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+            <div class="bg-gray-900 border border-white/20 w-full max-w-md rounded-[2.5rem] p-10 shadow-3xl animate-in zoom-in duration-300">
+                <div class="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mb-6 text-blue-500">
+                    <Folder class="w-8 h-8" />
+                </div>
+                <h3 class="text-3xl font-black text-white mb-2 tracking-tighter">Nueva Carpeta</h3>
+                <p class="text-white/40 mb-8 text-sm font-bold uppercase tracking-widest">Crea un subdirectorio dentro de {{ category.name }}.</p>
+                
+                <div class="space-y-6">
+                    <div>
+                        <input v-model="newFolderName" type="text" class="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-white font-bold focus:ring-blue-500 focus:border-blue-500" placeholder="Nombre de la carpeta..." @keyup.enter="createFolder" />
+                    </div>
+                    
+                    <div class="flex gap-4">
+                        <button @click="showNewFolderModal = false" class="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white font-black rounded-2xl transition-all uppercase tracking-widest text-[10px]">Cancelar</button>
+                        <button @click="createFolder" class="flex-1 py-4 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl transition-all uppercase tracking-widest text-[10px] shadow-lg shadow-blue-600/20">Crear Carpeta</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </AuthenticatedLayout>
 </template>
 

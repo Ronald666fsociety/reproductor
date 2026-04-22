@@ -19,6 +19,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/categories/{category}/unlock', [\App\Http\Controllers\CategoryController::class, 'unlock'])->name('categories.unlock');
     
     Route::post('/categories', [\App\Http\Controllers\Admin\AdminCategoryController::class, 'store'])->name('categories.store');
+    Route::post('/categories/{category}/subcategories', [\App\Http\Controllers\Admin\AdminCategoryController::class, 'storeNested'])->name('categories.store-nested');
     Route::patch('/categories/{category}', [\App\Http\Controllers\Admin\AdminCategoryController::class, 'update'])->name('categories.update');
     Route::delete('/categories/{category}', [\App\Http\Controllers\Admin\AdminCategoryController::class, 'destroy'])->name('categories.destroy');
     

@@ -21,6 +21,7 @@ class CategoryController extends Controller
         session()->forget('unlocked_categories');
 
         $categories = Category::where('user_id', auth()->id())
+            ->whereNull('parent_id')
             ->withCount('videos')
             ->orderBy('order')
             ->get();
@@ -50,6 +51,7 @@ class CategoryController extends Controller
                     'slug' => $category->slug,
                     'videos_count' => $category->videos_count,
                     'is_locked' => !empty($category->password),
+                    'parent_id' => $category->parent_id,
                 ];
             }),
             'stats' => [
@@ -68,14 +70,25 @@ class CategoryController extends Controller
             abort(403, 'Acceso denegado.');
         }
 
+        $category->load(['videos.tags', 'children', 'parent']);
+
         $unlockedCategories = session('unlocked_categories', []);
 
         if (!empty($category->password) && !in_array($category->id, $unlockedCategories)) {
             return back()->with('error', 'Esta sección está protegida.');
         }
 
+        // Obtener ruta de breadcrumbs
+        $breadcrumbs = [];
+        $current = $category;
+        while ($current) {
+            array_unshift($breadcrumbs, ['id' => $current->id, 'name' => $current->name, 'slug' => $current->slug]);
+            $current = $current->parent;
+        }
+
         return Inertia::render('Categories/Show', [
-            'category' => $category->load('videos'),
+            'category' => $category,
+            'breadcrumbs' => $breadcrumbs,
         ]);
     }
 
