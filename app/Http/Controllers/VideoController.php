@@ -21,12 +21,23 @@ class VideoController extends Controller
         ]);
 
         $category = Category::findOrFail($request->category_id);
-        if ($category->user_id !== auth()->id()) {
+        $user = auth()->user();
+
+        if ($category->user_id !== $user->id) {
             abort(403, 'Acceso denegado.');
         }
 
         if ($request->hasFile('video')) {
             $file = $request->file('video');
+
+            // Quota check
+            if ($user->storage_quota !== null) {
+                $usedStorage = $user->usedStorage();
+                if (($usedStorage + $file->getSize()) > $user->storage_quota) {
+                    return back()->with('error', 'No tienes suficiente espacio de almacenamiento disponible.');
+                }
+            }
+
             $mimeType = $file->getMimeType();
             $path = $file->store('videos', 'public');
             

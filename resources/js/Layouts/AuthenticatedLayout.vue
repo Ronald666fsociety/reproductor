@@ -6,7 +6,7 @@ import DropdownLink from '@/Components/DropdownLink.vue';
 import NavLink from '@/Components/NavLink.vue';
 import ResponsiveNavLink from '@/Components/ResponsiveNavLink.vue';
 import { Link } from '@inertiajs/vue3';
-import { Home, Folder, User as UserIcon, LogOut, Search, Bell, X, FileIcon, ChevronRight, Trash2, Activity } from 'lucide-vue-next';
+import { Home, Folder, User as UserIcon, LogOut, Search, Bell, X, FileIcon, ChevronRight, Trash2, Activity, LayoutDashboard } from 'lucide-vue-next';
 import axios from 'axios';
 
 const showingNavigationDropdown = ref(false);
@@ -84,6 +84,15 @@ const clearSearch = () => {
                                     <Folder class="w-4 h-4 mr-2" />
                                     Secciones
                                 </NavLink>
+                                    <NavLink
+                                        v-if="$page.props.auth.user.is_admin"
+                                        :href="route('admin.dashboard')"
+                                        :active="route().current('admin.dashboard')"
+                                        class="px-4 py-2 rounded-xl transition-all"
+                                    >
+                                        <LayoutDashboard class="w-4 h-4 mr-2" />
+                                        Dashboard
+                                    </NavLink>
                                     <NavLink
                                         v-if="$page.props.auth.user.is_admin"
                                         :href="route('admin.users.index')"
@@ -245,6 +254,9 @@ const clearSearch = () => {
                     <div class="space-y-1 pb-3 pt-2">
                         <ResponsiveNavLink :href="route('categories.index')" :active="route().current('categories.*')">
                             Secciones
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink v-if="$page.props.auth.user.is_admin" :href="route('admin.dashboard')" :active="route().current('admin.dashboard')">
+                            Dashboard
                         </ResponsiveNavLink>
                         <ResponsiveNavLink v-if="$page.props.auth.user.is_admin" :href="route('admin.users.index')" :active="route().current('admin.users.*')">
                             Usuarios

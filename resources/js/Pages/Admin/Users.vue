@@ -2,7 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
-import { UserPlus, Trash2, Users, ShieldAlert, Mail, Lock, User as UserIcon } from 'lucide-vue-next';
+import { UserPlus, Trash2, Users, ShieldAlert, Mail, Lock, User as UserIcon, HardDrive, Edit2 } from 'lucide-vue-next';
 import Swal from 'sweetalert2';
 
 interface User {
@@ -10,6 +10,8 @@ interface User {
     name: string;
     email: string;
     is_admin: boolean;
+    storage_quota: number | null;
+    used_storage: number;
     created_at: string;
 }
 
@@ -17,17 +19,30 @@ const props = defineProps<{
     users: User[];
 }>();
 
+const formatSize = (bytes: number | null | undefined) => {
+    if (bytes === null || bytes === undefined) return 'Ilimitado';
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
 const form = useForm({
     name: '',
     email: '',
     password: '',
+    storage_quota: null as number | null,
 });
 
 const isSubmitting = ref(false);
 
 const createUser = () => {
     isSubmitting.value = true;
-    form.post(route('admin.users.store'), {
+    form.transform((data) => ({
+        ...data,
+        storage_quota: data.storage_quota ? data.storage_quota * 1024 * 1024 * 1024 : null,
+    })).post(route('admin.users.store'), {
         preserveScroll: true,
         preserveState: false,
         onSuccess: () => {
@@ -79,6 +94,44 @@ const deleteUser = (id: number) => {
         }
     });
 };
+
+const editQuota = async (user: User) => {
+    const currentGb = user.storage_quota ? (user.storage_quota / (1024 * 1024 * 1024)).toFixed(2) : '';
+    
+    const { value: quotaGb } = await Swal.fire({
+        title: 'Asignar Cuota (GB)',
+        input: 'number',
+        inputLabel: 'Ingresa 0 o déjalo vacío para Ilimitado',
+        inputValue: currentGb,
+        showCancelButton: true,
+        background: '#111827',
+        color: '#fff',
+        confirmButtonColor: '#ec4899',
+        inputValidator: (value) => {
+            if (value && parseFloat(value) < 0) {
+                return 'La cuota no puede ser negativa';
+            }
+        }
+    });
+
+    if (quotaGb !== undefined) {
+        const bytes = (quotaGb === '' || parseFloat(quotaGb) === 0) ? null : parseFloat(quotaGb) * 1024 * 1024 * 1024;
+        
+        router.put(route('admin.users.update', user.id), { storage_quota: bytes }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                Swal.fire({
+                    title: '¡Actualizado!',
+                    text: 'La cuota ha sido modificada.',
+                    icon: 'success',
+                    background: '#111827',
+                    color: '#fff',
+                    confirmButtonColor: '#ec4899',
+                });
+            }
+        });
+    }
+};
 </script>
 
 <template>
@@ -111,7 +164,7 @@ const deleteUser = (id: number) => {
                     </div>
 
                     <form @submit.prevent="createUser" class="space-y-6">
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             <!-- Nombre -->
                             <div>
                                 <label class="block text-xs font-bold text-white/60 uppercase tracking-widest mb-2">Nombre</label>
@@ -159,6 +212,21 @@ const deleteUser = (id: number) => {
                                 </div>
                                 <div v-if="form.errors.password" class="text-red-400 text-xs mt-1">{{ form.errors.password }}</div>
                             </div>
+                            
+                            <!-- Quota -->
+                            <div>
+                                <label class="block text-xs font-bold text-white/60 uppercase tracking-widest mb-2">Cuota (GB) - Opcional</label>
+                                <div class="relative">
+                                    <HardDrive class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
+                                    <input 
+                                        v-model="form.storage_quota" 
+                                        type="number" step="0.1" min="0"
+                                        class="w-full bg-black/40 border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white placeholder-white/20 focus:ring-pink-500 focus:border-pink-500 transition-all font-mono"
+                                        placeholder="Vacío = Ilimitado"
+                                    >
+                                </div>
+                                <div v-if="form.errors.storage_quota" class="text-red-400 text-xs mt-1">{{ form.errors.storage_quota }}</div>
+                            </div>
                         </div>
 
                         <div class="flex justify-end pt-4">
@@ -199,11 +267,18 @@ const deleteUser = (id: number) => {
                                     <div class="flex items-center gap-3 mt-1">
                                         <p class="text-sm font-mono text-white/40">{{ user.email }}</p>
                                         <span class="w-1 h-1 bg-white/20 rounded-full"></span>
-                                        <p class="text-xs text-white/30 uppercase tracking-widest">Creado el {{ user.created_at }}</p>
+                                        <p class="text-xs text-white/30 tracking-widest uppercase"><span class="text-pink-400 font-bold">{{ formatSize(user.used_storage) }}</span> / {{ formatSize(user.storage_quota) }}</p>
                                     </div>
                                 </div>
                             </div>
-                            <div>
+                            <div class="flex items-center gap-2">
+                                <button 
+                                    @click="editQuota(user)"
+                                    class="p-3 bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white rounded-xl transition-colors shrink-0"
+                                    title="Modificar Cuota de Almacenamiento"
+                                >
+                                    <Edit2 class="w-5 h-5" />
+                                </button>
                                 <button 
                                     @click="deleteUser(user.id)"
                                     class="p-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-colors shrink-0"
