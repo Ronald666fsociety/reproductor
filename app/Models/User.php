@@ -22,6 +22,7 @@ class User extends Authenticatable
         'email',
         'password',
         'is_admin',
+        'storage_quota',
     ];
 
     /**
@@ -45,5 +46,19 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    public function categories()
+    {
+        return $this->hasMany(Category::class);
+    }
+
+    public function usedStorage()
+    {
+        return \App\Models\Video::withTrashed()
+            ->whereHas('category', function ($query) {
+                $query->where('user_id', $this->id)->withTrashed();
+            })
+            ->sum('file_size');
     }
 }
